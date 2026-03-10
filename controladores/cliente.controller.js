@@ -1,14 +1,25 @@
-const Cliente = require("../modelos/Cliente");
+import Cliente from "../modelos/Cliente.js";
+import { encrypt} from "../utils/encrypt.js";
+import { decrypt} from "../utils/decrypt.js";
 
-exports.getClientes = async (req, res) => {
+
+export const getClientes = async (req, res) => {
 
   const clientes = await Cliente.findAll();
 
-  res.json(clientes);
+  const clientesDescifrados = clientes.map(c => ({
+    ...c.toJSON(),
+    nombre: decrypt(c.nombre),
+    email: decrypt(c.email),
+    telefono: decrypt(c.telefono),
+    empresa: decrypt(c.empresa)
+  }));
+
+  res.json(clientesDescifrados);
 
 };
 
-exports.getClienteById = async (req, res) => {
+export const getClienteById = async (req, res) => {
 
   const cliente = await Cliente.findByPk(req.params.id);
 
@@ -16,19 +27,32 @@ exports.getClienteById = async (req, res) => {
     return res.status(404).json({ message: "Cliente no encontrado" });
   }
 
+  res.json({
+    ...cliente.toJSON(),
+    nombre: decrypt(cliente.nombre),
+    email: decrypt(cliente.email),
+    telefono: decrypt(cliente.telefono),
+    empresa: decrypt(cliente.empresa)
+  });
+
+};
+
+export const createCliente = async (req, res) => {
+
+  const { nombre, email, telefono, empresa } = req.body;
+
+  const cliente = await Cliente.create({
+    nombre: encrypt(nombre),
+    email: encrypt(email),
+    telefono: encrypt(telefono),
+    empresa: encrypt(empresa)
+  });
+
   res.json(cliente);
 
 };
 
-exports.createCliente = async (req, res) => {
-
-  const cliente = await Cliente.create(req.body);
-
-  res.json(cliente);
-
-};
-
-exports.updateCliente = async (req, res) => {
+export const updateCliente = async (req, res) => {
 
   const cliente = await Cliente.findByPk(req.params.id);
 
@@ -36,13 +60,20 @@ exports.updateCliente = async (req, res) => {
     return res.status(404).json({ message: "Cliente no encontrado" });
   }
 
-  await cliente.update(req.body);
+  const { nombre, email, telefono, empresa } = req.body;
+
+  await cliente.update({
+    nombre: encrypt(nombre),
+    email: encrypt(email),
+    telefono: encrypt(telefono),
+    empresa: encrypt(empresa)
+  });
 
   res.json(cliente);
 
 };
 
-exports.deleteCliente = async (req, res) => {
+export const deleteCliente = async (req, res) => {
 
   const cliente = await Cliente.findByPk(req.params.id);
 

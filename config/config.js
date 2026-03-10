@@ -1,11 +1,12 @@
-require('dotenv').config();
+import * as dotenv from 'dotenv';
+dotenv.config();
 
-module.exports = {
-  development: {
-    username: process.env.DB_USER,
-    password: process.env.DB_PASSWORD,
-    database: process.env.DB_NAME,
-    host: process.env.DB_HOST,
-    dialect: "mysql"
-  }
-};
+export const DB_PORT = process.env.DB_PORT;
+export const DB_HOST = process.env.DB_HOST;
+export const PORT = process.env.PORT;
+export const DB_USERNAME = process.env.DB_USERNAME;
+export const DB_PASSWORD = process.env.DB_PASSWORD;
+export const DB_NAME = process.env.DB_NAME;
+export const JWT_SECRET = process.env.JWT_SECRET;
+export const DB_CONNECTION = process.env.DB_CONNECTION
+export const SECRET_KEY = process.env.SECRET_KEY

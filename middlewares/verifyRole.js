@@ -1,4 +1,4 @@
-module.exports = (roles) => {
+export default (roles) => {
 
   return (req, res, next) => {
 

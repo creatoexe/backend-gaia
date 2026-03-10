@@ -1,26 +1,19 @@
-const express = require("express");
-const router = express.Router();
+import { Router } from "express";
+import { getClientes, getClienteById, createCliente, updateCliente, deleteCliente } from "../controladores/cliente.controller.js";
+import verifyToken from "../middlewares/verifyToken.js";
+import { createClienteValidator } from "../middlewares/clienteValidator.js";
+import validate from "../middlewares/validationResult.js";
 
-const clienteController = require("../controladores/cliente.controller");
-const verifyToken = require("../middlewares/verifyToken");
+const router = Router();
 
-const { createClienteValidator } = require("../middlewares/clienteValidator");
-const validate = require("../middlewares/validationResult");
+router.get("/clientes", verifyToken, getClientes);
 
-router.get("/clientes", verifyToken, clienteController.getClientes);
+router.get("/clientes/:id", verifyToken, getClienteById);
 
-router.get("/clientes/:id", verifyToken, clienteController.getClienteById);
+router.post("/clientes", verifyToken, createClienteValidator, validate, createCliente);
 
-router.post(
-  "/clientes",
-  verifyToken,
-  createClienteValidator,
-  validate,
-  clienteController.createCliente
-);
+router.put("/clientes/:id", verifyToken, updateCliente);
 
-router.put("/clientes/:id", verifyToken, clienteController.updateCliente);
+router.delete("/clientes/:id", verifyToken, deleteCliente);
 
-router.delete("/clientes/:id", verifyToken, clienteController.deleteCliente);
-
-module.exports = router;
+export default router;

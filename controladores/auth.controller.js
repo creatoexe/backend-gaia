@@ -1,19 +1,21 @@
-const User = require("../modelos/User");
-const CryptoJS = require("crypto-js");
-const jwt = require("jsonwebtoken");
+import User from "../modelos/User.js";
+import jwt from "jsonwebtoken";
+import { encrypt } from "../utils/encrypt.js";
+import { decrypt} from "../utils/decrypt.js";
+import { JWT_SECRET } from "../config/config.js";
 
-exports.registrarse = async (req, res) => {
+export const registrarse = async (req, res) => {
 
   try {
 
     const { nombre, email, password, rol } = req.body;
 
-    const hash = CryptoJS.SHA256(password).toString();
+    const passwordEncriptado = encrypt(password);
 
     const user = await User.create({
       nombre,
       email,
-      password_hash: hash,
+      password: passwordEncriptado,
       rol
     });
 
@@ -30,7 +32,7 @@ exports.registrarse = async (req, res) => {
 
 };
 
-exports.login = async (req, res) => {
+export const login = async (req, res) => {
 
   try {
 
@@ -42,15 +44,15 @@ exports.login = async (req, res) => {
       return res.status(404).json({ message: "Usuario no encontrado" });
     }
 
-    const hash = CryptoJS.SHA256(password).toString();
+    const passwordDesencriptado = decrypt(user.password);
 
-    if (hash !== user.password_hash) {
+    if (password !== passwordDesencriptado) {
       return res.status(401).json({ message: "Password incorrecto" });
     }
 
     const token = jwt.sign(
       { id: user.id, rol: user.rol },
-      process.env.JWT_SECRET,
+      JWT_SECRET,
       { expiresIn: "8h" }
     );
 
@@ -67,7 +69,7 @@ exports.login = async (req, res) => {
 
 };
 
-exports.me = async (req, res) => {
+export const me = async (req, res) => {
 
   const user = await User.findByPk(req.user.id);
 

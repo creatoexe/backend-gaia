@@ -1,21 +1,15 @@
-const express = require("express");
-const router = express.Router();
-const authController = require("../controladores/auth.controller");
-const verifyToken = require("../middlewares/verifyToken");
-const verifyRole = require("../middlewares/verifyRole");
+import { Router } from "express";
+import { registrarse, login, me } from "../controladores/auth.controller.js";
+import verifyToken from "../middlewares/verifyToken.js";
+import verifyRole from "../middlewares/verifyRole.js";
 
-router.post("/registrarse", authController.registrarse);
+const router = Router();
 
-router.post("/login", authController.login);
+router.post("/registrarse", registrarse);
+router.post("/login", login);
+router.get("/me", verifyToken, me);
+router.get("/admin", verifyToken, verifyRole(["administrador"]), (req, res) => {
+  res.json({ message: "Solo admin" });
+});
 
-router.get("/me", verifyToken, authController.me);
-router.get(
-  "/admin",
-  verifyToken,
-  verifyRole(["administrador"]),
-  (req, res) => {
-    res.json({ message: "Solo admin" });
-  }
-);
-
-module.exports = router;
+export default router;

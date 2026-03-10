@@ -1,12 +1,12 @@
-const { DataTypes } = require("sequelize");
-const sequelize = require("../config/database");
+import { DataTypes } from "sequelize";
+import { sequelize } from "../config/database.js";
 
 const Cliente = sequelize.define("Cliente", {
 
   id: {
-    type: DataTypes.INTEGER,
-    primaryKey: true,
-    autoIncrement: true
+    type: DataTypes.UUID,
+    defaultValue: DataTypes.UUIDV4,
+    primaryKey: true
   },
 
   nombre: {
@@ -32,4 +32,4 @@ const Cliente = sequelize.define("Cliente", {
   timestamps: true
 });
 
-module.exports = Cliente;
+export default Cliente;
