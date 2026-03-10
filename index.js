@@ -4,22 +4,18 @@ import { PORT } from "./config/config.js";
 import { sequelize } from "./config/database.js";
 import authRoutes from "./rutas/auth.routes.js";
 import clienteRoutes from "./rutas/cliente.routes.js";
-
+import {corsOption} from './config/corsOption.js'
 const _PORT = PORT || 3000;
 const app = express();
 
 app.use(express.json());
-app.use(cors({
-  origin: [
-    "http://localhost:8100/api",
-    "https://quotes-espam.netlify.app",
-    "http://192.168.0.143:8100",
-  ],
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-}));
+app.use(cors(corsOption));
 
-app.use("/api", authRoutes);
-app.use("/api", clienteRoutes);
+const api = express.Router();
+api.use(authRoutes);
+api.use(clienteRoutes);
+
+app.use("/api", api);
 
 const main = async () => {
   try {
