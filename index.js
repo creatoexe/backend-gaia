@@ -5,6 +5,7 @@ import { sequelize } from "./config/database.js";
 import authRoutes from "./rutas/auth.routes.js";
 import clienteRoutes from "./rutas/cliente.routes.js";
 import {corsOption} from './config/corsOption.js'
+import consultorRoutes from "./rutas/consultor.routes.js";
 const _PORT = PORT || 3000;
 const app = express();
 
@@ -14,6 +15,7 @@ app.use(cors(corsOption));
 const api = express.Router();
 api.use(authRoutes);
 api.use(clienteRoutes);
+api.use(consultorRoutes);
 
 app.use("/api", api);
 
