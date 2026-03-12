@@ -9,9 +9,15 @@ const EtapaAprobacion = sequelize.define("EtapaAprobacion",{
     primaryKey:true
   },
 
-  oportunidad_id:{
-    type:DataTypes.UUID,
-    allowNull:false
+   oportunidad_id: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: "oportunidad",
+      key: "id"
+    },
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
   },
 
   aprobado:{

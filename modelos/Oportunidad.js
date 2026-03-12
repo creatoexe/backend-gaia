@@ -9,9 +9,15 @@ const Oportunidad = sequelize.define("Oportunidad", {
     primaryKey:true
   },
 
-  cliente_id:{
-    type:DataTypes.UUID,
-    allowNull:false
+  cliente_id: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: "clientes",
+      key: "id"
+    },
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
   },
 
   nombre_proceso:{
