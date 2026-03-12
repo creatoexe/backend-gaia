@@ -16,16 +16,25 @@ const Cliente = sequelize.define("Cliente", {
 
   email: {
     type: DataTypes.STRING,
-    allowNull: false
+    allowNull: true
   },
 
   telefono: {
-    type: DataTypes.STRING
+    type: DataTypes.STRING,
+    allowNull: true ,
+    maxlength: 20
   },
 
   empresa: {
-    type: DataTypes.STRING
-  }
+    type: DataTypes.STRING,
+    allowNull: false ,
+    maxlength: 100
+  },
+
+  tipo_cliente: {
+    type: DataTypes.ENUM("Nuevo" , "Actual"),
+    defaultValue: "Nuevo"
+  },
 
 }, {
   tableName: "clientes",

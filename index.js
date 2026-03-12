@@ -23,7 +23,7 @@ const main = async () => {
   try {
     await sequelize.authenticate();
     console.log("Base de datos conectada.");
-    await sequelize.sync({ alter: false });
+    await sequelize.sync({ alter: !false });
     app.listen(_PORT, "0.0.0.0", () => {
       console.log(`Servidor corriendo en el puerto => ${_PORT}`);
     });

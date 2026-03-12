@@ -32,6 +32,14 @@ export async function up(queryInterface, Sequelize) {
       type: Sequelize.BOOLEAN,
       defaultValue: true
     },
+    verificado: {
+      type: Sequelize.BOOLEAN,
+      defaultValue: false
+    },
+    token_verificacion: {
+      type: Sequelize.STRING,
+      allowNull: true
+    },
 
     createdAt: {
       allowNull: false,

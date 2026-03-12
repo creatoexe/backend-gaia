@@ -10,6 +10,7 @@ import {
 import verifyToken from "../middlewares/verifyToken.js";
 import { createConsultorValidator } from "../middlewares/consultorValidator.js";
 import validate from "../middlewares/validationResult.js";
+import { verificarEmail } from "../controladores/verificacion.controller.js";
 
 const router = Router();
 
@@ -28,5 +29,7 @@ router.post(
 router.put("/consultores/:id", verifyToken, updateConsultor);
 
 router.delete("/consultores/:id", verifyToken, deleteConsultor);
+
+router.get("/auth/verificar", verificarEmail);
 
 export default router;

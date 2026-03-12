@@ -10,7 +10,7 @@ router.get("/clientes", verifyToken, getClientes);
 
 router.get("/clientes/:id", verifyToken, getClienteById);
 
-router.post("/clientes", verifyToken, createClienteValidator, validate, createCliente);
+router.post("/clientes", verifyToken, createCliente);
 
 router.put("/clientes/:id", verifyToken, updateCliente);
 

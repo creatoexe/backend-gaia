@@ -26,13 +26,23 @@ const User = sequelize.define("User", {
   },
 
   rol: {
-    type: DataTypes.STRING,
+    type: DataTypes.ENUM("consultor", "admin"),
     allowNull: false
   },
 
   activo: {
     type: DataTypes.BOOLEAN,
     defaultValue: true
+  },
+
+  verificado: {
+    type: DataTypes.BOOLEAN,
+    defaultValue: false
+  },
+
+  token_verificacion: {
+    type: DataTypes.STRING,
+    allowNull: true
   }
 
 }, {

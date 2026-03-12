@@ -1,13 +1,11 @@
 import User from "../modelos/User.js";
 import jwt from "jsonwebtoken";
 import { encrypt } from "../utils/encrypt.js";
-import { decrypt} from "../utils/decrypt.js";
+import { decrypt } from "../utils/decrypt.js";
 import { JWT_SECRET } from "../config/config.js";
 
 export const registrarse = async (req, res) => {
-
   try {
-
     const { nombre, email, password, rol } = req.body;
 
     const passwordEncriptado = encrypt(password);
@@ -19,23 +17,15 @@ export const registrarse = async (req, res) => {
       rol
     });
 
-    res.json({
-      message: "Usuario creado",
-      user
-    });
+    res.json({ message: "Usuario creado", user });
 
   } catch (error) {
-
     res.status(500).json({ error: error.message });
-
   }
-
 };
 
 export const login = async (req, res) => {
-
   try {
-
     const { email, password } = req.body;
 
     const user = await User.findOne({ where: { email } });
@@ -47,7 +37,17 @@ export const login = async (req, res) => {
     const passwordDesencriptado = decrypt(user.password);
 
     if (password !== passwordDesencriptado) {
-      return res.status(401).json({ message: "Password incorrecto" });
+      return res.status(401).json({ message: "Contraseña incorrecta" });
+    }
+
+    if (!user.verificado) {
+      return res.status(403).json({
+        message: "Cuenta no verificada. Revisa tu correo y haz clic en el enlace de verificación."
+      });
+    }
+
+    if (!user.activo) {
+      return res.status(403).json({ message: "Tu cuenta está desactivada. Contacta al administrador." });
     }
 
     const token = jwt.sign(
@@ -56,23 +56,14 @@ export const login = async (req, res) => {
       { expiresIn: "8h" }
     );
 
-    res.json({
-      token,
-      user
-    });
+    res.json({ token, user });
 
   } catch (error) {
-
     res.status(500).json({ error: error.message });
-
   }
-
 };
 
 export const me = async (req, res) => {
-
   const user = await User.findByPk(req.user.id);
-
   res.json(user);
-
 };

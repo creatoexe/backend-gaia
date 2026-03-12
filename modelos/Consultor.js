@@ -5,9 +5,9 @@ const Consultor = sequelize.define(
   "Consultor",
   {
     id: {
-      type: DataTypes.INTEGER,
-      primaryKey: true,
-      autoIncrement: true
+      type: DataTypes.UUID,
+      defaultValue: DataTypes.UUIDV4,
+      primaryKey: true
     },
 
     nombre: {
@@ -20,12 +20,18 @@ const Consultor = sequelize.define(
       allowNull: false
     },
 
-    especialidad: {
-      type: DataTypes.STRING
+    rol: {
+      type: DataTypes.ENUM("consultor", "admin"),
+      allowNull: false
     },
 
     telefono: {
-      type: DataTypes.STRING
+      type: DataTypes.STRING,
+      allowNull: true
+    },
+    activo: {
+      type: DataTypes.BOOLEAN,
+      defaultValue: true
     }
   },
   {
