@@ -2,10 +2,13 @@ import express from "express";
 import cors from "cors";
 import { PORT } from "./config/config.js";
 import { sequelize } from "./config/database.js";
+import "./modelos/relations.js";
 import authRoutes from "./rutas/auth.routes.js";
 import clienteRoutes from "./rutas/cliente.routes.js";
 import {corsOption} from './config/corsOption.js'
 import consultorRoutes from "./rutas/consultor.routes.js";
+import oportunidadRoutes from "./rutas/oportunidad.routes.js"
+
 const _PORT = PORT || 3000;
 const app = express();
 
@@ -16,6 +19,7 @@ const api = express.Router();
 api.use(authRoutes);
 api.use(clienteRoutes);
 api.use(consultorRoutes);
+api.use(oportunidadRoutes)
 
 app.use("/api", api);
 
