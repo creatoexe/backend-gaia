@@ -36,7 +36,9 @@ const Oportunidad = sequelize.define("Oportunidad", {
       "Propuesta",
       "En Aprobacion",
       "Aprobado",
-      "cerrado",
+      "Rechazado",
+      "En Ejecución",
+      "Cerrado",
       "Stand BY",
       "Facturada"
     )
