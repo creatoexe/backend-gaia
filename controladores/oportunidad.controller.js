@@ -8,79 +8,126 @@ import EtapaProyecto from "../modelos/EtapaProyecto.js";
 import EtapaAprobacion from "../modelos/EtapaAprobacion.js";
 import Interaccion from "../modelos/Interaccion.js";
 
-import {Op} from "sequelize";
+import { Op } from "sequelize";
 
+export const getOportunidades = async (req, res) => {
+  try {
+    const { estatus, cliente, consultor, fecha } = req.query;
 
-export const getOportunidades = async(req,res)=>{
+    let where = {};
 
-const {estatus,cliente,consultor,fecha} = req.query;
+    if (estatus) where.estatus = estatus;
 
-let where={};
+    if (cliente) where.cliente_id = cliente;
 
-if(estatus) where.estatus=estatus;
-if(cliente) where.cliente_id=cliente;
+    if (fecha) {
+      where.fecha_lead = {
+        [Op.gte]: fecha,
+      };
+    }
 
-if(fecha){
-where.fecha_lead={
-[Op.gte]:fecha
-};
-}
+    const oportunidades = await Oportunidad.findAll({
+      where,
 
-const oportunidades = await Oportunidad.findAll({
-where,
-include:[Cliente]
-});
+      include: [
+        {
+          model: Cliente,
+        },
+      ],
+    });
 
-res.json(oportunidades);
-
-};
-
-
-export const getOportunidadById = async(req,res)=>{
-
-const oportunidad = await Oportunidad.findByPk(req.params.id,{
-include:[
-Cliente,
-EtapaLevantamiento,
-EtapaEstimacion,
-EtapaPropuesta,
-EtapaProyecto,
-EtapaAprobacion,
-Interaccion
-]
-});
-
-res.json(oportunidad);
-
+    res.json(oportunidades);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
 
+export const getOportunidadById = async (req, res) => {
+  try {
+    const oportunidad = await Oportunidad.findByPk(req.params.id, {
+      include: [
+        Cliente,
+        EtapaLevantamiento,
+        EtapaEstimacion,
+        EtapaPropuesta,
+        EtapaProyecto,
+        EtapaAprobacion,
+        Interaccion,
+      ],
+    });
 
-export const createOportunidad = async(req,res)=>{
+    if (!oportunidad) {
+      return res.status(404).json({
+        message: "Oportunidad no encontrada",
+      });
+    }
 
-const oportunidad = await Oportunidad.create(req.body);
-
-res.json(oportunidad);
-
+    res.json(oportunidad);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
 
+export const createOportunidad = async (req, res) => {
+  try {
+    const { cliente_id } = req.body;
 
-export const updateOportunidad = async(req,res)=>{
+    const cliente = await Cliente.findByPk(cliente_id);
 
-const oportunidad = await Oportunidad.findByPk(req.params.id);
+    if (!cliente) {
+      return res.status(404).json({
+        message: "Cliente no existe",
+      });
+    }
 
-await oportunidad.update(req.body);
+    const oportunidad = await Oportunidad.create(req.body);
 
-res.json(oportunidad);
-
+    res.status(201).json({
+      message: "Oportunidad creada",
+      oportunidad,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };
 
+export const updateOportunidad = async (req, res) => {
+  try {
+    const oportunidad = await Oportunidad.findByPk(req.params.id);
 
-export const deleteOportunidad = async(req,res)=>{
+    if (!oportunidad) {
+      return res.status(404).json({
+        message: "Oportunidad no encontrada",
+      });
+    }
 
-const oportunidad = await Oportunidad.findByPk(req.params.id);
+    await oportunidad.update(req.body);
 
-await oportunidad.destroy();
+    res.json({
+      message: "Oportunidad actualizada",
+      oportunidad,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+};
 
-res.json({message:"Eliminado"});
+export const deleteOportunidad = async (req, res) => {
+  try {
+    const oportunidad = await Oportunidad.findByPk(req.params.id);
 
+    if (!oportunidad) {
+      return res.status(404).json({
+        message: "Oportunidad no encontrada",
+      });
+    }
+
+    await oportunidad.destroy();
+
+    res.json({
+      message: "Oportunidad eliminada",
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 };

@@ -10,9 +10,15 @@ const EtapaProyecto = sequelize.define("EtapaProyecto",{
   },
 
   oportunidad_id:{
-    type:DataTypes.UUID,
-    allowNull:false
+  type:DataTypes.UUID,
+  allowNull:false,
+  references:{
+    model:"oportunidad",
+    key:"id"
   },
+  onDelete:"CASCADE",
+  onUpdate:"CASCADE"
+},
 
   consultor_responsable_id:{
     type:DataTypes.UUID,

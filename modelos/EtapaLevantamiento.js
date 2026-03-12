@@ -9,9 +9,15 @@ const EtapaLevantamiento = sequelize.define("EtapaLevantamiento",{
     primaryKey:true
   },
 
-  oportunidad_id:{
-    type:DataTypes.UUID,
-    allowNull:false
+  oportunidad_id: {
+    type: DataTypes.UUID,
+    allowNull: false,
+    references: {
+      model: "oportunidad",
+      key: "id"
+    },
+    onDelete: "CASCADE",
+    onUpdate: "CASCADE"
   },
 
   consultor_id:{
