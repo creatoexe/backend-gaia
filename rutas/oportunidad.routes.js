@@ -1,17 +1,15 @@
 import { Router } from "express";
-
 import {
   getOportunidades,
   getOportunidadById,
   createOportunidad,
+  createOportunidadFull,
   updateOportunidad,
   deleteOportunidad,
 } from "../controladores/oportunidad.controller.js";
 
 import verifyToken from "../middlewares/verifyToken.js";
-
-import validate from "../middlewares/validationResult.js";
-
+import validate    from "../middlewares/validationResult.js";
 import {
   createOportunidadValidator,
   updateOportunidadValidator,
@@ -29,6 +27,12 @@ router.get(
 );
 
 router.get("/oportunidades/:id", verifyToken, getOportunidadById);
+
+router.post(
+  "/oportunidades/full",
+  verifyToken,
+  createOportunidadFull,
+);
 
 router.post(
   "/oportunidades",
