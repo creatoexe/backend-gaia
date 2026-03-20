@@ -1,35 +1,40 @@
 import { Router } from "express";
+
+import verifyToken      from "../middlewares/verifyToken.js";
 import {
-  getConsultores,
-  getConsultorById,
-  createConsultor,
-  updateConsultor,
-  deleteConsultor
+  listarConsultores,
+  obtenerConsultor,
+  crearConsultor,
+  actualizarConsultor,
+  eliminarConsultor,
 } from "../controladores/consultor.controller.js";
 
-import verifyToken from "../middlewares/verifyToken.js";
-import { createConsultorValidator } from "../middlewares/consultorValidator.js";
-import validate from "../middlewares/validationResult.js";
-import { verificarEmail } from "../controladores/verificacion.controller.js";
-
 const router = Router();
+router.use(verifyToken);
 
-router.get("/consultores", verifyToken, getConsultores);
+router.get(
+  "/consultores",
+  listarConsultores
+);
 
-router.get("/consultores/:id", verifyToken, getConsultorById);
+router.get(
+  "/consultores/:id",
+  obtenerConsultor
+);
 
 router.post(
   "/consultores",
-  verifyToken,
-  createConsultorValidator,
-  validate,
-  createConsultor
+  crearConsultor
 );
 
-router.put("/consultores/:id", verifyToken, updateConsultor);
+router.put(
+  "/consultores/:id",
+  actualizarConsultor
+);
 
-router.delete("/consultores/:id", verifyToken, deleteConsultor);
-
-router.get("/auth/verificar", verificarEmail);
+router.delete(
+  "/consultores/:id",
+  eliminarConsultor
+);
 
 export default router;

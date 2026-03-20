@@ -1,15 +1,15 @@
 import { DataTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 
-export const EtapaAprobacion = sequelize.define("EtapaAprobacion",{
+export const EtapaPreliminar = sequelize.define("EtapaPreliminar",{
 
-    id:{
+  id:{
     type:DataTypes.UUID,
     defaultValue:DataTypes.UUIDV4,
     primaryKey:true
   },
-
-   proceso_id: {
+  
+  proceso_id: {
     type: DataTypes.UUID,
     allowNull: false,
     references: {
@@ -19,27 +19,20 @@ export const EtapaAprobacion = sequelize.define("EtapaAprobacion",{
     onDelete: "CASCADE",
     onUpdate: "CASCADE"
   },
-
-  aprobado:{
-    type:DataTypes.BOOLEAN
-  },
-
-  fecha_aprobacion:{
+  fecha_preliminar: {
     type:DataTypes.DATE
   },
-
-  motivo_rechazo:{
+  resultado:{
     type:DataTypes.STRING
-  },
-
-  fecha_rechazo:{
-    type:DataTypes.DATE
   },
   observaciones:{
     type:DataTypes.TEXT,
     allowNull:true
+  },
+  viable:{
+    type:DataTypes.BOOLEAN
   }
 },{
-  tableName:"etapa_aprobacion",
+  tableName:"etapa_preliminar",
   timestamps:false
 });

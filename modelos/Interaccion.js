@@ -1,7 +1,7 @@
 import { DataTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 
-const Interaccion = sequelize.define("Interaccion",{
+export const Interaccion = sequelize.define("Interaccion",{
 
   id:{
     type:DataTypes.UUID,
@@ -9,11 +9,11 @@ const Interaccion = sequelize.define("Interaccion",{
     primaryKey:true
   },
 
-  oportunidad_id: {
+  proceso_id: {
     type: DataTypes.UUID,
     allowNull: false,
     references: {
-      model: "oportunidad",
+      model: "procesos",
       key: "id"
     },
     onDelete: "CASCADE",
@@ -22,7 +22,13 @@ const Interaccion = sequelize.define("Interaccion",{
 
   consultor_id:{
     type:DataTypes.UUID,
-    allowNull:false
+    allowNull:false,
+    references:{
+      model:"consultores",
+      key:"id"
+    },
+    onDelete:"CASCADE",
+    onUpdate:"CASCADE"
   },
 
   tipo:{
@@ -30,7 +36,9 @@ const Interaccion = sequelize.define("Interaccion",{
   },
 
   descripcion:{
-    type:DataTypes.TEXT
+    type:DataTypes.TEXT,
+    allowNull:true,
+    maxlength:500
   },
 
   fecha:{
@@ -41,5 +49,3 @@ const Interaccion = sequelize.define("Interaccion",{
   tableName:"interaccion",
   timestamps:false
 });
-
-export default Interaccion;

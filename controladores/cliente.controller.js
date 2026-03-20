@@ -1,118 +1,200 @@
-import Cliente      from "../modelos/Cliente.js";
-import Oportunidad  from "../modelos/Oportunidad.js";
-import { encrypt }  from "../utils/encrypt.js";
-import { decrypt }  from "../utils/decrypt.js";
+import { Op }            from "sequelize";
+import { sequelize }     from "../config/database.js";
+import {
+  Cliente,
+  UsuarioCliente,
+}                        from "../modelos/relations.js";
+import { INCLUDE_CLIENTE } from "../Helpers/includeCliente.js";
+import { emailValido } from "../utils/verifyEmail.js";
 
-const decryptCliente = (c) => ({
-  ...c.toJSON(),
-  nombre:       decrypt(c.nombre),
-  email:        c.email    ? decrypt(c.email)    : null,
-  telefono:     c.telefono ? decrypt(c.telefono) : null,
-  empresa:      decrypt(c.empresa),
-  tipo_cliente: c.tipo_cliente,
-});
-
-export const getClientes = async (req, res) => {
+export const listarClientes = async (req, res) => {
   try {
-    const clientes = await Cliente.findAll({
-      include: [{
-        model:      Oportunidad,
-        attributes: ["id"],       
-      }],
+    const { search, page = 1, limit = 20 } = req.query;
+    const where = {};
+    if (search) where.nombre = { [Op.iLike]: `%${search.trim()}%` };
+
+    const offset = (Math.max(1, +page) - 1) * +limit;
+
+    const { count, rows } = await Cliente.findAndCountAll({
+      where,
+      include:  INCLUDE_CLIENTE,
+      order:    [["nombre", "ASC"]],
+      limit:    +limit,
+      offset,
+      distinct: true,
     });
 
-    const result = clientes.map(c => ({
-      ...decryptCliente(c),
-      oportunidades: c.Oportunidads?.length ?? 0,
-    }));
-
-    res.json(result);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    return res.status(200).json({
+      ok:    true,
+      total: count,
+      page:  +page,
+      pages: Math.ceil(count / +limit),
+      data:  rows,
+    });
+  } catch (err) {
+    console.error("[listarClientes]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al listar clientes.", detalle: err.message });
   }
 };
 
 
-export const getClienteById = async (req, res) => {
+export const obtenerCliente = async (req, res) => {
   try {
-    const cliente = await Cliente.findByPk(req.params.id, {
-      include: [{ model: Oportunidad, attributes: ["id"] }],
-    });
+    const cliente = await Cliente.findByPk(req.params.id, { include: INCLUDE_CLIENTE });
 
-    if (!cliente)
-      return res.status(404).json({ message: "Cliente no encontrado" });
+    if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
 
-    res.json({
-      ...decryptCliente(cliente),
-      oportunidades: cliente.Oportunidads?.length ?? 0,
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    return res.status(200).json({ ok: true, data: cliente });
+  } catch (err) {
+    console.error("[obtenerCliente]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al obtener cliente.", detalle: err.message });
   }
 };
 
-export const createCliente = async (req, res) => {
+
+export const crearCliente = async (req, res) => {
+  const t = await sequelize.transaction();
   try {
-    const { nombre, email, telefono, empresa, tipo_cliente } = req.body;
+    const { nombre, email, telefono, empresa, usuarios = [] } = req.body;
 
-    const cliente = await Cliente.create({
-      nombre:       encrypt(nombre),
-      email:        email    ? encrypt(email)    : null,
-      telefono:     telefono ? encrypt(telefono) : null,
-      empresa:      encrypt(empresa),
-      tipo_cliente,
-    });
+    if (!nombre?.trim())   { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." }); }
 
-    res.status(201).json({
-      message: "Cliente creado",
-      cliente: { ...decryptCliente(cliente), oportunidades: 0 },
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    if (!empresa?.trim())  { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'empresa' es obligatoria." }); }
+
+    if (!emailValido(email)) { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "Email inválido." }); }
+
+    const existe = await Cliente.findOne({ where: { nombre: nombre.trim() } });
+    if (existe) { await t.rollback(); return res.status(409).json({ ok: false, mensaje: "Ya existe un cliente con ese nombre." }); }
+
+    const cliente = await Cliente.create(
+      { nombre: nombre.trim(), email, telefono, empresa: empresa.trim() },
+      { transaction: t }
+    );
+
+    if (usuarios.length > 0) {
+      const data = usuarios.map((u) => ({ ...u, cliente_id: cliente.id }));
+      await UsuarioCliente.bulkCreate(data, { transaction: t });
+    }
+
+    await t.commit();
+    const resultado = await Cliente.findByPk(cliente.id, { include: INCLUDE_CLIENTE });
+    return res.status(201).json({ ok: true, mensaje: "Cliente creado.", data: resultado });
+  } catch (err) {
+    await t.rollback();
+    console.error("[crearCliente]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al crear cliente.", detalle: err.message });
   }
 };
 
-export const updateCliente = async (req, res) => {
-  try {
-    const cliente = await Cliente.findByPk(req.params.id, {
-      include: [{ model: Oportunidad, attributes: ["id"] }],
-    });
-
-    if (!cliente)
-      return res.status(404).json({ message: "Cliente no encontrado" });
-
-    const { nombre, email, telefono, empresa, tipo_cliente } = req.body;
-
-    await cliente.update({
-      nombre:       encrypt(nombre),
-      email:        email    ? encrypt(email)    : null,
-      telefono:     telefono ? encrypt(telefono) : null,
-      empresa:      encrypt(empresa),
-      tipo_cliente,
-    });
-
-    res.json({
-      message: "Cliente actualizado",
-      cliente: {
-        ...decryptCliente(cliente),
-        oportunidades: cliente.Oportunidads?.length ?? 0,
-      },
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-};
-
-export const deleteCliente = async (req, res) => {
+export const actualizarCliente = async (req, res) => {
   try {
     const cliente = await Cliente.findByPk(req.params.id);
+    if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
 
-    if (!cliente)
-      return res.status(404).json({ message: "Cliente no encontrado" });
+    const { nombre, email, telefono, empresa } = req.body;
+
+    if (email && !emailValido(email))
+      return res.status(400).json({ ok: false, mensaje: "Email inválido." });
+
+    if (nombre && nombre.trim() !== cliente.nombre) {
+      const dup = await Cliente.findOne({ where: { nombre: nombre.trim() } });
+      if (dup) return res.status(409).json({ ok: false, mensaje: "Nombre de cliente ya en uso." });
+    }
+
+    await cliente.update({ nombre, email, telefono, empresa });
+
+    const resultado = await Cliente.findByPk(cliente.id, { include: INCLUDE_CLIENTE });
+    return res.status(200).json({ ok: true, mensaje: "Cliente actualizado.", data: resultado });
+  } catch (err) {
+    console.error("[actualizarCliente]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al actualizar cliente.", detalle: err.message });
+  }
+};
+
+
+export const eliminarCliente = async (req, res) => {
+  try {
+    const cliente = await Cliente.findByPk(req.params.id);
+    if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
 
     await cliente.destroy();
-    res.json({ message: "Cliente eliminado" });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
+    return res.status(200).json({ ok: true, mensaje: "Cliente eliminado." });
+  } catch (err) {
+    console.error("[eliminarCliente]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al eliminar cliente.", detalle: err.message });
+  }
+};
+
+export const listarUsuarios = async (req, res) => {
+  try {
+    const cliente = await Cliente.findByPk(req.params.clienteId);
+    if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
+
+    const usuarios = await UsuarioCliente.findAll({
+      where: { cliente_id: req.params.clienteId },
+      order: [["nombre", "ASC"]],
+    });
+
+    return res.status(200).json({ ok: true, data: usuarios });
+  } catch (err) {
+    console.error("[listarUsuarios]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al obtener usuarios.", detalle: err.message });
+  }
+};
+
+export const crearUsuario = async (req, res) => {
+  try {
+    const cliente = await Cliente.findByPk(req.params.clienteId);
+    if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
+
+    const { nombre, email, telefono, cargo } = req.body;
+    if (!nombre?.trim()) return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." });
+    if (!emailValido(email)) return res.status(400).json({ ok: false, mensaje: "Email inválido." });
+
+    const usuario = await UsuarioCliente.create({
+      cliente_id: req.params.clienteId,
+      nombre: nombre.trim(),
+      email,
+      telefono,
+      cargo,
+    });
+
+    return res.status(201).json({ ok: true, mensaje: "Usuario creado.", data: usuario });
+  } catch (err) {
+    console.error("[crearUsuario]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al crear usuario.", detalle: err.message });
+  }
+};
+
+export const actualizarUsuario = async (req, res) => {
+  try {
+    const usuario = await UsuarioCliente.findOne({
+      where: { id: req.params.usuarioId, cliente_id: req.params.clienteId },
+    });
+    if (!usuario) return res.status(404).json({ ok: false, mensaje: "Usuario no encontrado." });
+
+    const { nombre, email, telefono, cargo, activo } = req.body;
+    if (email && !emailValido(email)) return res.status(400).json({ ok: false, mensaje: "Email inválido." });
+
+    await usuario.update({ nombre, email, telefono, cargo, activo });
+    return res.status(200).json({ ok: true, mensaje: "Usuario actualizado.", data: usuario });
+  } catch (err) {
+    console.error("[actualizarUsuario]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al actualizar usuario.", detalle: err.message });
+  }
+};
+
+export const eliminarUsuario = async (req, res) => {
+  try {
+    const usuario = await UsuarioCliente.findOne({
+      where: { id: req.params.usuarioId, cliente_id: req.params.clienteId },
+    });
+    if (!usuario) return res.status(404).json({ ok: false, mensaje: "Usuario no encontrado." });
+
+    await usuario.destroy();
+    return res.status(200).json({ ok: true, mensaje: "Usuario eliminado." });
+  } catch (err) {
+    console.error("[eliminarUsuario]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al eliminar usuario.", detalle: err.message });
   }
 };

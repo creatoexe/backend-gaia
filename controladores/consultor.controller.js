@@ -1,119 +1,93 @@
-import crypto from "crypto";
-import Consultor from "../modelos/Consultor.js";
-import User     from "../modelos/User.js";
-import { encrypt }               from "../utils/encrypt.js";
-import { decrypt }               from "../utils/decrypt.js";
-import { sendVerificationEmail } from "../services/emailService.js";
+import { Op }        from "sequelize";
+import { Consultor } from "../modelos/relations.js";
+import { emailValido } from "../utils/verifyEmail.js";
 
+export const listarConsultores = async (req, res) => {
+  try {
+    const { activo, rol, search, page = 1, limit = 20 } = req.query;
+    const where = {};
+    if (activo !== undefined) where.activo = activo === "true";
+    if (rol)   where.rol    = rol;
+    if (search) where.nombre = { [Op.iLike]: `%${search.trim()}%` };
 
-export const getConsultores = async (req, res) => {
+    const offset = (Math.max(1, +page) - 1) * +limit;
+    const { count, rows } = await Consultor.findAndCountAll({
+      where, order: [["nombre", "ASC"]], limit: +limit, offset,
+    });
 
-  const consultores = await Consultor.findAll();
-
-  const consultoresDescifrados = consultores.map(c => ({
-    ...c.toJSON(),
-    nombre:   decrypt(c.nombre),
-    email:    decrypt(c.email),
-    telefono: c.telefono ? decrypt(c.telefono) : null,
-  }));
-
-  res.json(consultoresDescifrados);
-
+    return res.status(200).json({
+      ok: true, total: count, page: +page, pages: Math.ceil(count / +limit), data: rows,
+    });
+  } catch (err) {
+    console.error("[listarConsultores]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al listar consultores.", detalle: err.message });
+  }
 };
 
-
-export const getConsultorById = async (req, res) => {
-
-  const consultor = await Consultor.findByPk(req.params.id);
-
-  if (!consultor) {
-    return res.status(404).json({ message: "Consultor no encontrado" });
+export const obtenerConsultor = async (req, res) => {
+  try {
+    const consultor = await Consultor.findByPk(req.params.id);
+    if (!consultor) return res.status(404).json({ ok: false, mensaje: "Consultor no encontrado." });
+    return res.status(200).json({ ok: true, data: consultor });
+  } catch (err) {
+    console.error("[obtenerConsultor]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al obtener consultor.", detalle: err.message });
   }
-
-  res.json({
-    ...consultor.toJSON(),
-    nombre:   decrypt(consultor.nombre),
-    email:    decrypt(consultor.email),
-    telefono: consultor.telefono ? decrypt(consultor.telefono) : null,
-  });
-
 };
 
+export const crearConsultor = async (req, res) => {
+  try {
+    const { nombre, email, rol = "consultor", telefono } = req.body;
 
-export const createConsultor = async (req, res) => {
+    if (!nombre?.trim()) return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." });
+    if (!email?.trim())  return res.status(400).json({ ok: false, mensaje: "'email' es obligatorio." });
+    if (!emailValido(email)) return res.status(400).json({ ok: false, mensaje: "Email inválido." });
+    if (!["consultor", "admin"].includes(rol))
+      return res.status(400).json({ ok: false, mensaje: "'rol' debe ser 'consultor' o 'admin'." });
 
-  const { nombre, email, telefono, rol, activo } = req.body;
+    const existe = await Consultor.findOne({ where: { email: email.trim() } });
+    if (existe) return res.status(409).json({ ok: false, mensaje: "Ya existe un consultor con ese email." });
 
-  const existingUser = await User.findOne({ where: { email } });
-  if (existingUser) {
-    return res.status(409).json({ message: "Ya existe un usuario con ese correo" });
+    const consultor = await Consultor.create({ nombre: nombre.trim(), email: email.trim(), rol, telefono });
+    return res.status(201).json({ ok: true, mensaje: "Consultor creado.", data: consultor });
+  } catch (err) {
+    console.error("[crearConsultor]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al crear consultor.", detalle: err.message });
   }
-
-  const tempPassword      = crypto.randomBytes(5).toString("hex");
-  const tokenVerificacion = crypto.randomUUID();
-
-  const consultor = await Consultor.create({
-    nombre:   encrypt(nombre),
-    email:    encrypt(email),
-    telefono: telefono ? encrypt(telefono) : null,
-    rol:      rol ?? "consultor",
-    activo:   activo ?? true,
-  });
-
-  await User.create({
-    nombre,
-    email,
-    password:           encrypt(tempPassword),
-    rol:                rol ?? "consultor",
-    activo:             activo ?? true,
-    verificado:         false,
-    token_verificacion: tokenVerificacion,
-  });
-
-  sendVerificationEmail(email, nombre, tokenVerificacion, tempPassword)
-    .catch(err => console.error("[emailService] Error enviando correo:", err.message));
-
-  res.status(201).json({
-    message:   "Consultor creado. Se envió un correo de verificación.",
-    consultor,
-  });
-
 };
 
+export const actualizarConsultor = async (req, res) => {
+  try {
+    const consultor = await Consultor.findByPk(req.params.id);
+    if (!consultor) return res.status(404).json({ ok: false, mensaje: "Consultor no encontrado." });
 
-export const updateConsultor = async (req, res) => {
+    const { nombre, email, rol, telefono, activo } = req.body;
 
-  const consultor = await Consultor.findByPk(req.params.id);
+    if (email && email !== consultor.email) {
+      if (!emailValido(email)) return res.status(400).json({ ok: false, mensaje: "Email inválido." });
+      const dup = await Consultor.findOne({ where: { email } });
+      if (dup) return res.status(409).json({ ok: false, mensaje: "Email ya en uso." });
+    }
+    if (rol && !["consultor", "admin"].includes(rol))
+      return res.status(400).json({ ok: false, mensaje: "'rol' inválido." });
 
-  if (!consultor) {
-    return res.status(404).json({ message: "Consultor no encontrado" });
+    await consultor.update({ nombre, email, rol, telefono, activo });
+    return res.status(200).json({ ok: true, mensaje: "Consultor actualizado.", data: consultor });
+  } catch (err) {
+    console.error("[actualizarConsultor]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al actualizar consultor.", detalle: err.message });
   }
-
-  const { nombre, email, telefono, rol, activo } = req.body;
-
-  await consultor.update({
-    nombre:   encrypt(nombre),
-    email:    encrypt(email),
-    telefono: telefono ? encrypt(telefono) : null,
-    rol,
-    activo,
-  });
-
-  res.json(consultor);
-
 };
 
+export const eliminarConsultor = async (req, res) => {
+  try {
+    const consultor = await Consultor.findByPk(req.params.id);
+    if (!consultor) return res.status(404).json({ ok: false, mensaje: "Consultor no encontrado." });
 
-export const deleteConsultor = async (req, res) => {
-
-  const consultor = await Consultor.findByPk(req.params.id);
-
-  if (!consultor) {
-    return res.status(404).json({ message: "Consultor no encontrado" });
+    await consultor.update({ activo: false });
+    return res.status(200).json({ ok: true, mensaje: "Consultor desactivado." });
+  } catch (err) {
+    console.error("[eliminarConsultor]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al eliminar consultor.", detalle: err.message });
   }
-
-  await consultor.destroy();
-
-  res.json({ message: "Consultor eliminado" });
-
 };

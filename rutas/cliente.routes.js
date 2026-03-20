@@ -1,19 +1,68 @@
 import { Router } from "express";
-import { getClientes, getClienteById, createCliente, updateCliente, deleteCliente } from "../controladores/cliente.controller.js";
-import verifyToken from "../middlewares/verifyToken.js";
-import { createClienteValidator } from "../middlewares/clienteValidator.js";
-import validate from "../middlewares/validationResult.js";
+
+import verifyToken       from "../middlewares/verifyToken.js";
+
+import {
+  listarClientes,
+  obtenerCliente,
+  crearCliente,
+  actualizarCliente,
+  eliminarCliente,
+  listarUsuarios,
+  crearUsuario,
+  actualizarUsuario,
+  eliminarUsuario,
+} from "../controladores/cliente.controller.js";
 
 const router = Router();
 
-router.get("/clientes", verifyToken, getClientes);
+router.use(verifyToken);
 
-router.get("/clientes/:id", verifyToken, getClienteById);
+router.get(
+  "/clientes",
+  listarClientes
+);
 
-router.post("/clientes", verifyToken, createCliente);
+router.get(
+  "/clientes/:id",
+  obtenerCliente
+);
 
-router.put("/clientes/:id", verifyToken, updateCliente);
+router.post(
+  "/clientes",
+  crearCliente
+);
 
-router.delete("/clientes/:id", verifyToken, deleteCliente);
+router.put(
+  "/clientes/:id",
+  actualizarCliente
+);
+
+router.delete(
+  "/clientes/:id",
+  eliminarCliente
+);
+
+// ─── Usuarios del cliente ─────────────────────────────────────
+router.get(
+  "/clientes/:clienteId/usuarios",
+  listarUsuarios
+);
+
+router.post(
+  "/clientes/:clienteId/usuarios",
+  crearUsuario
+);
+
+router.put(
+  "/clientes/:clienteId/usuarios/:usuarioId",
+
+  actualizarUsuario
+);
+
+router.delete(
+  "/clientes/:clienteId/usuarios/:usuarioId",
+  eliminarUsuario
+);
 
 export default router;

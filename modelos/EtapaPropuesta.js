@@ -1,7 +1,7 @@
 import { DataTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 
-const EtapaPropuesta = sequelize.define("EtapaPropuesta",{
+export const EtapaPropuesta = sequelize.define("EtapaPropuesta",{
 
   id:{
     type:DataTypes.UUID,
@@ -9,11 +9,11 @@ const EtapaPropuesta = sequelize.define("EtapaPropuesta",{
     primaryKey:true
   },
 
-  oportunidad_id: {
+  proceso_id: {
     type: DataTypes.UUID,
     allowNull: false,
     references: {
-      model: "oportunidad",
+      model: "procesos",
       key: "id"
     },
     onDelete: "CASCADE",
@@ -39,11 +39,12 @@ const EtapaPropuesta = sequelize.define("EtapaPropuesta",{
 
   horas_presupuestadas:{
     type:DataTypes.INTEGER
+  },
+  observaciones:{
+    type:DataTypes.TEXT,
+    allowNull:true
   }
-
 },{
   tableName:"etapa_propuesta",
   timestamps:false
 });
-
-export default EtapaPropuesta;

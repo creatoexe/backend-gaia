@@ -1,7 +1,7 @@
 import { DataTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 
-const Cliente = sequelize.define("Cliente", {
+export const Cliente = sequelize.define("Cliente", {
 
   id: {
     type: DataTypes.UUID,
@@ -30,15 +30,8 @@ const Cliente = sequelize.define("Cliente", {
     allowNull: false ,
     maxlength: 100
   },
-
-  tipo_cliente: {
-    type: DataTypes.ENUM("Nuevo" , "Actual"),
-    defaultValue: "Nuevo"
-  },
-
 }, {
   tableName: "clientes",
   timestamps: true
 });
 
-export default Cliente;

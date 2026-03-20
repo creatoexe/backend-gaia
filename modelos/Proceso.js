@@ -1,7 +1,7 @@
 import { DataTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 
-const Oportunidad = sequelize.define("Oportunidad", {
+export const Proceso = sequelize.define("Proceso", {
 
   id:{
     type:DataTypes.UUID,
@@ -9,11 +9,11 @@ const Oportunidad = sequelize.define("Oportunidad", {
     primaryKey:true
   },
 
-  cliente_id: {
+  proyecto_id: {
     type: DataTypes.UUID,
     allowNull: false,
     references: {
-      model: "clientes",
+      model: "proyectos",
       key: "id"
     },
     onDelete: "CASCADE",
@@ -21,7 +21,13 @@ const Oportunidad = sequelize.define("Oportunidad", {
   },
 
   nombre_proceso:{
-    type:DataTypes.STRING
+    type:DataTypes.STRING,
+    allowNull: false
+  },
+
+  tipo:{
+    type:DataTypes.ENUM("Proyecto Nuevo", "Solicitud de Cambio"),
+    allowNull: true
   },
 
   tipo_proceso:{
@@ -33,6 +39,7 @@ const Oportunidad = sequelize.define("Oportunidad", {
       "Integración"
     )
   },
+
   estatus:{
     type:DataTypes.ENUM(
       "Lead",
@@ -77,11 +84,20 @@ const Oportunidad = sequelize.define("Oportunidad", {
 
   accion_responsable:{
     type:DataTypes.STRING
+  },
+
+  herramienta_rpa_id: {
+    type: DataTypes.UUID,
+    allowNull: true,
+    references: {
+      model: "herramientas_rpa",
+      key: "id"
+    },
+    onDelete: "SET NULL",
+    onUpdate: "CASCADE"
   }
 
 },{
-  tableName:"oportunidad",
+  tableName:"procesos",
   timestamps:true
 });
-
-export default Oportunidad;

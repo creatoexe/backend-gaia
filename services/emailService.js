@@ -12,7 +12,6 @@ const createTransporter = () =>
     tls:    { rejectUnauthorized: false },
   });
 
-/* ── Verify connection on startup ─────────────── */
 export const verifyMailConnection = async () => {
   try {
     const t = createTransporter();
@@ -23,7 +22,6 @@ export const verifyMailConnection = async () => {
   }
 };
 
-/* ── HTML components ──────────────────────────── */
 const emailHead = () => `
   <meta charset="UTF-8"/>
   <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
@@ -71,7 +69,6 @@ const credRow = (label, value) => `
   </div>
 `;
 
-/* ── Templates ────────────────────────────────── */
 const verificationTemplate = (nombre, email, password, verifyUrl) => `
 <!DOCTYPE html>
 <html lang="es">
@@ -104,7 +101,6 @@ const verificationTemplate = (nombre, email, password, verifyUrl) => `
 </html>
 `;
 
-/* ── Senders ──────────────────────────────────── */
 export const sendVerificationEmail = async (email, nombre, token, password) => {
   const verifyUrl   = `${FRONTEND_URL}/verificar?token=${token}`;
   const transporter = createTransporter();

@@ -1,7 +1,7 @@
 import { DataTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 
-const EtapaLevantamiento = sequelize.define("EtapaLevantamiento",{
+export const EtapaLevantamiento = sequelize.define("EtapaLevantamiento",{
 
    id:{
     type:DataTypes.UUID,
@@ -9,15 +9,15 @@ const EtapaLevantamiento = sequelize.define("EtapaLevantamiento",{
     primaryKey:true
   },
 
-  oportunidad_id: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: "oportunidad",
-      key: "id"
+  proceso_id : {
+    type:DataTypes.UUID,
+    allowNull:false,
+    references:{
+      model:"procesos",
+      key:"id"
     },
-    onDelete: "CASCADE",
-    onUpdate: "CASCADE"
+    onDelete:"CASCADE",
+    onUpdate:"CASCADE"
   },
 
   consultor_id:{
@@ -27,11 +27,12 @@ const EtapaLevantamiento = sequelize.define("EtapaLevantamiento",{
 
   fecha_levantamiento:{
     type:DataTypes.DATE
+  },
+  observaciones:{
+    type:DataTypes.TEXT,
+    allowNull:true
   }
-
 },{
   tableName:"etapa_levantamiento",
   timestamps:false
 });
-
-export default EtapaLevantamiento;
