@@ -28,6 +28,32 @@ export const crearClienteValidator = [
   body("usuarios.*.email")
     .optional({ nullable: true })
     .isEmail().withMessage("El email de un usuario no es válido."),
+  
+    body("precio_hora_desarrollo")
+  .optional({ nullable: true })
+  .isFloat({ min: 0 })
+  .withMessage("precio_hora_desarrollo debe ser número positivo"),
+
+ body("precio_hora_soporte")
+  .optional({ nullable: true })
+  .isFloat({ min: 0 }).withMessage("precio_hora_soporte debe ser decimal"),
+
+body("precio_hora_cambio")
+  .optional({ nullable: true })
+  .isFloat({ min: 0 }).withMessage("precio_hora_cambio debe ser decimal"),
+
+body("porcentaje_gobierno")
+  .optional({ nullable: true })
+  .isFloat({ min: 0, max: 100 })
+  .withMessage("porcentaje_gobierno debe estar entre 0 y 100"),
+
+body("descuento_gobierno")
+  .optional({ nullable: true })
+  .isFloat().withMessage("descuento_gobierno debe ser decimal"),
+
+body("nota_gobierno")
+  .optional({ nullable: true })
+  .isString().withMessage("nota_gobierno debe ser texto"),
 ];
 
 export const actualizarClienteValidator = [

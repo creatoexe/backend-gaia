@@ -32,9 +32,10 @@ export const EtapaPreliminarConsultor = sequelize.define("EtapaPreliminarConsult
 }, {
   tableName: "etapa_preliminar_consultor",
   timestamps: false,
-  uniqueKeys: {
-    uniq_lev_cons: {
-      fields: ["etapa_preliminar_id", "consultor_id"]
-    }
-  }
+   indexes: [
+  {
+    unique: true,
+    fields: ["etapa_preliminar_id", "consultor_id"],
+    name: "uniq_lev_cons"
+  }]
 });

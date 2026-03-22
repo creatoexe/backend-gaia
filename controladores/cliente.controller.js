@@ -55,7 +55,13 @@ export const obtenerCliente = async (req, res) => {
 export const crearCliente = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { nombre, email, telefono, empresa, usuarios = [] } = req.body;
+    const { nombre, email, telefono, empresa, usuarios = [],  
+      precio_hora_desarrollo,
+      precio_hora_soporte,
+      precio_hora_cambio,
+      porcentaje_gobierno,
+      descuento_gobierno,
+      nota_gobierno } = req.body;
 
     if (!nombre?.trim())   { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." }); }
 
@@ -67,7 +73,12 @@ export const crearCliente = async (req, res) => {
     if (existe) { await t.rollback(); return res.status(409).json({ ok: false, mensaje: "Ya existe un cliente con ese nombre." }); }
 
     const cliente = await Cliente.create(
-      { nombre: nombre.trim(), email, telefono, empresa: empresa.trim() },
+      { nombre: nombre.trim(), email, telefono, empresa: empresa.trim(), precio_hora_desarrollo,
+      precio_hora_soporte,
+      precio_hora_cambio,
+      porcentaje_gobierno,
+      descuento_gobierno,
+      nota_gobierno },
       { transaction: t }
     );
 
@@ -91,7 +102,12 @@ export const actualizarCliente = async (req, res) => {
     const cliente = await Cliente.findByPk(req.params.id);
     if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
 
-    const { nombre, email, telefono, empresa } = req.body;
+    const { nombre, email, telefono, empresa,  precio_hora_desarrollo,
+    precio_hora_soporte,
+    precio_hora_cambio,
+    porcentaje_gobierno,
+    descuento_gobierno,
+    nota_gobierno } = req.body;
 
     if (email && !emailValido(email))
       return res.status(400).json({ ok: false, mensaje: "Email inválido." });
@@ -101,7 +117,12 @@ export const actualizarCliente = async (req, res) => {
       if (dup) return res.status(409).json({ ok: false, mensaje: "Nombre de cliente ya en uso." });
     }
 
-    await cliente.update({ nombre, email, telefono, empresa });
+    await cliente.update({ nombre, email, telefono, empresa, precio_hora_desarrollo,
+    precio_hora_soporte,
+    precio_hora_cambio,
+    porcentaje_gobierno,
+    descuento_gobierno,
+    nota_gobierno });
 
     const resultado = await Cliente.findByPk(cliente.id, { include: INCLUDE_CLIENTE });
     return res.status(200).json({ ok: true, mensaje: "Cliente actualizado.", data: resultado });
