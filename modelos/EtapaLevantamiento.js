@@ -20,11 +20,6 @@ export const EtapaLevantamiento = sequelize.define("EtapaLevantamiento",{
     onUpdate:"CASCADE"
   },
 
-  consultor_id:{
-    type:DataTypes.UUID,
-    allowNull:false
-  },
-
   fecha_levantamiento:{
     type:DataTypes.DATE
   },

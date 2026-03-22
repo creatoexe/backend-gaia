@@ -20,10 +20,7 @@ export const EtapaEstimacion = sequelize.define("EtapaEstimacion",{
     onUpdate: "CASCADE"
   },
 
-  consultor_id:{
-    type:DataTypes.UUID,
-    allowNull:false
-  },
+ 
   fecha_estimacion:{
     type:DataTypes.DATE
   },

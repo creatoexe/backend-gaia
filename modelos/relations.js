@@ -22,6 +22,12 @@ import { ProyectoArea }           from "./ProyectoArea.js";
 import { ProyectoUsuarioRol }     from "./ProyectoUsuarioRol.js";
 import { Rol }                    from "./Rol.js";
 import { UsuarioCliente }         from "./UsuarioCliente.js";
+import { EtapaLevantamientoConsultor } from "./EtapaLevantamientoConsultor.js";
+import { EtapaEstimacionConsultor }    from "./EtapaEstimacionConsultor.js";
+import { EtapaPropuestaConsultor }     from "./EtapaPropuestaConsultor.js";
+import { EtapaEjecucionConsultor }     from "./EtapaEjecucionConsultor.js";
+import { EtapaAprobacionConsultor }    from "./EtapaAprobacionConsultor.js";
+import { EtapaPreliminarConsultor }    from "./EtapaPreliminarConsultor.js";
 
 // ─────────────────────────────────────────────────────────
 // CLIENTE  →  PROYECTOS / USUARIOS
@@ -102,11 +108,94 @@ EtapaPreliminar.belongsTo(Proceso,    { foreignKey: "proceso_id" });
 EtapaAprobacion.belongsTo(Proceso,    { foreignKey: "proceso_id" });
 EtapaEjecucion.belongsTo(Proceso,     { foreignKey: "proceso_id" });
 
-// Consultor responsable por etapa
-EtapaLevantamiento.belongsTo(Consultor, { foreignKey: "consultor_id", as: "consultor" });
-EtapaEstimacion.belongsTo(Consultor,    { foreignKey: "consultor_id", as: "consultor" });
-EtapaPropuesta.belongsTo(Consultor,     { foreignKey: "consultor_id", as: "consultor" });
-EtapaEjecucion.belongsTo(Consultor,     { foreignKey: "consultor_responsable_id", as: "consultor" });
+// ─────────────────────────────────────────────────────────
+// ETAPAS  ↔  CONSULTORES  (N:M)
+// ─────────────────────────────────────────────────────────
+
+// LEVANTAMIENTO
+EtapaLevantamiento.belongsToMany(Consultor, { through: EtapaLevantamientoConsultor,
+  foreignKey: "etapa_levantamiento_id",
+  otherKey: "consultor_id",
+  as: "consultores"
+});
+
+Consultor.belongsToMany(EtapaLevantamiento, { through: EtapaLevantamientoConsultor,
+  foreignKey: "consultor_id",
+  otherKey: "etapa_levantamiento_id",
+  as: "levantamientos"
+});
+
+
+// ESTIMACIÓN
+EtapaEstimacion.belongsToMany(Consultor, {through: EtapaEstimacionConsultor,
+  foreignKey: "etapa_estimacion_id",
+  otherKey: "consultor_id",
+  as: "consultores"
+});
+
+Consultor.belongsToMany(EtapaEstimacion, {through: EtapaEstimacionConsultor,
+  foreignKey: "consultor_id",
+  otherKey: "etapa_estimacion_id",
+  as: "estimaciones"
+});
+
+
+// PROPUESTA
+EtapaPropuesta.belongsToMany(Consultor, {through: EtapaPropuestaConsultor,
+  foreignKey: "etapa_propuesta_id",
+  otherKey: "consultor_id",
+  as: "consultores"
+});
+
+Consultor.belongsToMany(EtapaPropuesta, {through: EtapaPropuestaConsultor,
+  foreignKey: "consultor_id",
+  otherKey: "etapa_propuesta_id",
+  as: "propuestas"
+});
+
+
+// EJECUCIÓN
+EtapaEjecucion.belongsToMany(Consultor, {through: EtapaEjecucionConsultor,
+  foreignKey: "etapa_ejecucion_id",
+  otherKey: "consultor_id",
+  as: "consultores"
+});
+
+Consultor.belongsToMany(EtapaEjecucion, {through: EtapaEjecucionConsultor,
+  foreignKey: "consultor_id",
+  otherKey: "etapa_ejecucion_id",
+  as: "ejecuciones"
+});
+
+
+// APROBACION
+EtapaAprobacion.belongsToMany(Consultor, {through: EtapaAprobacionConsultor,
+  foreignKey: "etapa_aprobacion_id",
+  otherKey: "consultor_id",
+  as: "consultores"
+});
+
+Consultor.belongsToMany(EtapaAprobacion, {through: EtapaAprobacionConsultor,
+  foreignKey: "consultor_id",
+  otherKey: "etapa_aprobacion_id",
+  as: "aprobaciones"
+});
+
+
+// PRELIMINAR
+EtapaPreliminar.belongsToMany(Consultor, {through: EtapaPreliminarConsultor,
+  foreignKey: "etapa_preliminar_id",
+  otherKey: "consultor_id",
+  as: "consultores"
+});
+
+Consultor.belongsToMany(EtapaPreliminar, {through: EtapaPreliminarConsultor,
+  foreignKey: "consultor_id",
+  otherKey: "etapa_preliminar_id",
+  as: "preliminares"
+});
+
+
 
 // ─────────────────────────────────────────────────────────
 // PROCESO  →  INTERACCIONES  (1:N)
@@ -139,4 +228,10 @@ export {
   ProyectoUsuarioRol,
   Rol,
   UsuarioCliente,
+  EtapaLevantamientoConsultor,
+  EtapaEstimacionConsultor,
+  EtapaPropuestaConsultor,
+  EtapaEjecucionConsultor,
+  EtapaAprobacionConsultor,
+  EtapaPreliminarConsultor,
 };

@@ -20,10 +20,7 @@ export const EtapaPropuesta = sequelize.define("EtapaPropuesta",{
     onUpdate: "CASCADE"
   },
 
-  consultor_id:{
-    type:DataTypes.UUID,
-    allowNull:false
-  },
+ 
 
   nivel_detalle:{
     type:DataTypes.STRING
