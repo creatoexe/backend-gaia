@@ -55,35 +55,33 @@ export const obtenerCliente = async (req, res) => {
 export const crearCliente = async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { nombre, email, telefono, empresa, usuarios = [],  
-      precio_hora_desarrollo,
-      precio_hora_soporte,
-      precio_hora_cambio,
-      porcentaje_gobierno,
-      descuento_gobierno,
-      nota_gobierno } = req.body;
+    const {
+      nombre, empresa, usuarios = [],
+      precio_hora_desarrollo, precio_hora_soporte,
+      precio_hora_cambio, porcentaje_gobierno, nota,
+    } = req.body;
 
-    if (!nombre?.trim())   { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." }); }
-
-    if (!empresa?.trim())  { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'empresa' es obligatoria." }); }
-
-    if (!emailValido(email)) { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "Email inválido." }); }
+    if (!nombre?.trim())  { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." }); }
+    if (!empresa?.trim()) { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'empresa' es obligatoria." }); }
 
     const existe = await Cliente.findOne({ where: { nombre: nombre.trim() } });
     if (existe) { await t.rollback(); return res.status(409).json({ ok: false, mensaje: "Ya existe un cliente con ese nombre." }); }
 
     const cliente = await Cliente.create(
-      { nombre: nombre.trim(), email, telefono, empresa: empresa.trim(), precio_hora_desarrollo,
-      precio_hora_soporte,
-      precio_hora_cambio,
-      porcentaje_gobierno,
-      descuento_gobierno,
-      nota_gobierno },
+      {
+        nombre:                 nombre.trim(),
+        empresa:                empresa.trim(),
+        precio_hora_desarrollo: precio_hora_desarrollo ?? null,
+        precio_hora_soporte:    precio_hora_soporte    ?? null,
+        precio_hora_cambio:     precio_hora_cambio     ?? null,
+        porcentaje_gobierno:    porcentaje_gobierno    ?? null,
+        nota:                   nota || null,
+      },
       { transaction: t }
     );
 
     if (usuarios.length > 0) {
-      const data = usuarios.map((u) => ({ ...u, cliente_id: cliente.id }));
+      const data = usuarios.map(u => ({ ...u, cliente_id: cliente.id }));
       await UsuarioCliente.bulkCreate(data, { transaction: t });
     }
 
@@ -102,27 +100,26 @@ export const actualizarCliente = async (req, res) => {
     const cliente = await Cliente.findByPk(req.params.id);
     if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
 
-    const { nombre, email, telefono, empresa,  precio_hora_desarrollo,
-    precio_hora_soporte,
-    precio_hora_cambio,
-    porcentaje_gobierno,
-    descuento_gobierno,
-    nota_gobierno } = req.body;
+    const {
+      nombre,empresa,
+      precio_hora_desarrollo, precio_hora_soporte,
+      precio_hora_cambio, porcentaje_gobierno, nota,
+    } = req.body;
 
-    if (email && !emailValido(email))
-      return res.status(400).json({ ok: false, mensaje: "Email inválido." });
-
-    if (nombre && nombre.trim() !== cliente.nombre) {
+     if (nombre && nombre.trim() !== cliente.nombre) {
       const dup = await Cliente.findOne({ where: { nombre: nombre.trim() } });
       if (dup) return res.status(409).json({ ok: false, mensaje: "Nombre de cliente ya en uso." });
     }
 
-    await cliente.update({ nombre, email, telefono, empresa, precio_hora_desarrollo,
-    precio_hora_soporte,
-    precio_hora_cambio,
-    porcentaje_gobierno,
-    descuento_gobierno,
-    nota_gobierno });
+    await cliente.update({
+      nombre:                 nombre?.trim()        || cliente.nombre,
+      empresa:                empresa?.trim()       || cliente.empresa,
+      precio_hora_desarrollo: precio_hora_desarrollo ?? null,
+      precio_hora_soporte:    precio_hora_soporte    ?? null,
+      precio_hora_cambio:     precio_hora_cambio     ?? null,
+      porcentaje_gobierno:    porcentaje_gobierno    ?? null,
+      nota:                   nota                  ?? null,
+    });
 
     const resultado = await Cliente.findByPk(cliente.id, { include: INCLUDE_CLIENTE });
     return res.status(200).json({ ok: true, mensaje: "Cliente actualizado.", data: resultado });
@@ -131,7 +128,6 @@ export const actualizarCliente = async (req, res) => {
     return res.status(500).json({ ok: false, mensaje: "Error al actualizar cliente.", detalle: err.message });
   }
 };
-
 
 export const eliminarCliente = async (req, res) => {
   try {
@@ -194,10 +190,9 @@ export const actualizarUsuario = async (req, res) => {
     });
     if (!usuario) return res.status(404).json({ ok: false, mensaje: "Usuario no encontrado." });
 
-    const { nombre, email, telefono, cargo, activo } = req.body;
-    if (email && !emailValido(email)) return res.status(400).json({ ok: false, mensaje: "Email inválido." });
+    const { nombre, cargo, activo } = req.body;
 
-    await usuario.update({ nombre, email, telefono, cargo, activo });
+    await usuario.update({ nombre,cargo, activo });
     return res.status(200).json({ ok: true, mensaje: "Usuario actualizado.", data: usuario });
   } catch (err) {
     console.error("[actualizarUsuario]", err);

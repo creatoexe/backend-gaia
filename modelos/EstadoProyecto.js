@@ -16,14 +16,19 @@ export const EstadoProyecto = sequelize.define("EstadoProyecto", {
   },
   estado: {
     type: DataTypes.ENUM(
+      "Lead",
       "Pendiente",
-      "En Análisis",
-      "En Revisión",
+      "Contactado",
+      "Levantamiento",
+      "Estimacion",
+      "Propuesta",
+      "En Aprobacion",
       "Aprobado",
-      "Activo",
-      "Pausado",
+      "Rechazado",
+      "En Ejecución",
       "Cerrado",
-      "Cancelado"
+      "Stand BY",
+      "Facturada"
     ),
     allowNull: false,
   },

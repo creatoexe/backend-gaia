@@ -28,12 +28,15 @@ import { EtapaPropuestaConsultor }     from "./EtapaPropuestaConsultor.js";
 import { EtapaEjecucionConsultor }     from "./EtapaEjecucionConsultor.js";
 import { EtapaAprobacionConsultor }    from "./EtapaAprobacionConsultor.js";
 import { EtapaPreliminarConsultor }    from "./EtapaPreliminarConsultor.js";
+import { Chat }         from "./Chat.js";
+import { ContextoChat } from "./ContextoChat.js";
+import {Mensaje} from './Mensajes.js'
 
 // ─────────────────────────────────────────────────────────
 // CLIENTE  →  PROYECTOS / USUARIOS
 // ─────────────────────────────────────────────────────────
-Cliente.hasMany(Proyecto,       { foreignKey: "cliente_id", as: "proyectos",  onDelete: "CASCADE" });
-Cliente.hasMany(UsuarioCliente, { foreignKey: "cliente_id", as: "usuarios",   onDelete: "CASCADE" });
+Cliente.hasMany(Proyecto,       { foreignKey: "cliente_id", as: "proyectos", onDelete: "CASCADE" });
+Cliente.hasMany(UsuarioCliente, { foreignKey: "cliente_id", as: "usuarios",  onDelete: "CASCADE" });
 
 Proyecto.belongsTo(Cliente,       { foreignKey: "cliente_id", as: "cliente" });
 UsuarioCliente.belongsTo(Cliente, { foreignKey: "cliente_id", as: "cliente" });
@@ -48,10 +51,10 @@ Area.belongsToMany(Proyecto, {
   through: ProyectoArea, foreignKey: "area_id", otherKey: "proyecto_id", as: "proyectos",
 });
 ProyectoArea.belongsTo(Proyecto, { foreignKey: "proyecto_id" });
-ProyectoArea.belongsTo(Area,     { foreignKey: "area_id" });
+ProyectoArea.belongsTo(Area,     { foreignKey: "area_id"     });
 
 // ─────────────────────────────────────────────────────────
-// PROYECTO  ↔  USUARIO_CLIENTE  ↔  ROL  (N:M con metadata)
+// PROYECTO  ↔  USUARIO_CLIENTE  ↔  ROL  (N:M)
 // ─────────────────────────────────────────────────────────
 Proyecto.belongsToMany(UsuarioCliente, {
   through: ProyectoUsuarioRol, foreignKey: "proyecto_id", otherKey: "usuario_cliente_id", as: "miembros",
@@ -59,9 +62,9 @@ Proyecto.belongsToMany(UsuarioCliente, {
 UsuarioCliente.belongsToMany(Proyecto, {
   through: ProyectoUsuarioRol, foreignKey: "usuario_cliente_id", otherKey: "proyecto_id", as: "proyectos",
 });
-ProyectoUsuarioRol.belongsTo(Proyecto,       { foreignKey: "proyecto_id" });
+ProyectoUsuarioRol.belongsTo(Proyecto,       { foreignKey: "proyecto_id"         });
 ProyectoUsuarioRol.belongsTo(UsuarioCliente, { foreignKey: "usuario_cliente_id", as: "usuario" });
-ProyectoUsuarioRol.belongsTo(Rol,            { foreignKey: "rol_id",             as: "rol" });
+ProyectoUsuarioRol.belongsTo(Rol,            { foreignKey: "rol_id",             as: "rol"     });
 Rol.hasMany(ProyectoUsuarioRol,              { foreignKey: "rol_id" });
 
 // ─────────────────────────────────────────────────────────
@@ -70,19 +73,19 @@ Rol.hasMany(ProyectoUsuarioRol,              { foreignKey: "rol_id" });
 HerramientaRpa.hasMany(AsignacionHerramientas, { foreignKey: "herramienta_rpa_id", as: "asignaciones" });
 HerramientaRpa.hasMany(Proceso,                { foreignKey: "herramienta_rpa_id", as: "procesos"     });
 
-AsignacionHerramientas.belongsTo(HerramientaRpa, { foreignKey: "herramienta_rpa_id", as: "herramienta" });
-AsignacionHerramientas.belongsTo(Proyecto,        { foreignKey: "proyecto_id",        as: "proyecto"   });
-AsignacionHerramientas.belongsTo(Consultor,       { foreignKey: "asignado_por",        as: "asignadoPor"});
+AsignacionHerramientas.belongsTo(HerramientaRpa, { foreignKey: "herramienta_rpa_id", as: "herramienta"  });
+AsignacionHerramientas.belongsTo(Proyecto,        { foreignKey: "proyecto_id",        as: "proyecto"    });
+AsignacionHerramientas.belongsTo(Consultor,       { foreignKey: "asignado_por",        as: "asignadoPor" });
 
 Proyecto.hasMany(AsignacionHerramientas, { foreignKey: "proyecto_id", as: "herramientas", onDelete: "CASCADE" });
 
 // ─────────────────────────────────────────────────────────
 // PROYECTO  →  LÍNEA DE TIEMPO DE ESTADOS
 // ─────────────────────────────────────────────────────────
-Proyecto.hasMany(EstadoProyecto,       { foreignKey: "proyecto_id", as: "historial_estados", onDelete: "CASCADE" });
-EstadoProyecto.belongsTo(Proyecto,     { foreignKey: "proyecto_id" });
-EstadoProyecto.belongsTo(Consultor,    { foreignKey: "consultor_id", as: "consultor" });
-Consultor.hasMany(EstadoProyecto,      { foreignKey: "consultor_id" });
+Proyecto.hasMany(EstadoProyecto,    { foreignKey: "proyecto_id",  as: "historial_estados", onDelete: "CASCADE" });
+EstadoProyecto.belongsTo(Proyecto,  { foreignKey: "proyecto_id"  });
+EstadoProyecto.belongsTo(Consultor, { foreignKey: "consultor_id", as: "consultor" });
+Consultor.hasMany(EstadoProyecto,   { foreignKey: "consultor_id" });
 
 // ─────────────────────────────────────────────────────────
 // PROYECTO  →  PROCESOS
@@ -113,89 +116,64 @@ EtapaEjecucion.belongsTo(Proceso,     { foreignKey: "proceso_id" });
 // ─────────────────────────────────────────────────────────
 
 // LEVANTAMIENTO
-EtapaLevantamiento.belongsToMany(Consultor, { through: EtapaLevantamientoConsultor,
-  foreignKey: "etapa_levantamiento_id",
-  otherKey: "consultor_id",
-  as: "consultores"
+EtapaLevantamiento.belongsToMany(Consultor, {
+  through: EtapaLevantamientoConsultor, foreignKey: "etapa_levantamiento_id",
+  otherKey: "consultor_id", as: "consultores", uniqueKey: "uniq_lev_cons"
 });
-
-Consultor.belongsToMany(EtapaLevantamiento, { through: EtapaLevantamientoConsultor,
-  foreignKey: "consultor_id",
-  otherKey: "etapa_levantamiento_id",
-  as: "levantamientos"
+Consultor.belongsToMany(EtapaLevantamiento, {
+  through: EtapaLevantamientoConsultor, foreignKey: "consultor_id",
+  otherKey: "etapa_levantamiento_id", as: "levantamientos", uniqueKey: "uniq_lev_cons"
 });
-
 
 // ESTIMACIÓN
-EtapaEstimacion.belongsToMany(Consultor, {through: EtapaEstimacionConsultor,
-  foreignKey: "etapa_estimacion_id",
-  otherKey: "consultor_id",
-  as: "consultores"
+EtapaEstimacion.belongsToMany(Consultor, {
+  through: EtapaEstimacionConsultor, foreignKey: "etapa_estimacion_id",
+  otherKey: "consultor_id", as: "consultores", uniqueKey: "uniq_est_cons"
 });
-
-Consultor.belongsToMany(EtapaEstimacion, {through: EtapaEstimacionConsultor,
-  foreignKey: "consultor_id",
-  otherKey: "etapa_estimacion_id",
-  as: "estimaciones"
+Consultor.belongsToMany(EtapaEstimacion, {
+  through: EtapaEstimacionConsultor, foreignKey: "consultor_id",
+  otherKey: "etapa_estimacion_id", as: "estimaciones", uniqueKey: "uniq_est_cons"
 });
-
 
 // PROPUESTA
-EtapaPropuesta.belongsToMany(Consultor, {through: EtapaPropuestaConsultor,
-  foreignKey: "etapa_propuesta_id",
-  otherKey: "consultor_id",
-  as: "consultores"
+EtapaPropuesta.belongsToMany(Consultor, {
+  through: EtapaPropuestaConsultor, foreignKey: "etapa_propuesta_id",
+  otherKey: "consultor_id", as: "consultores", uniqueKey: "uniq_prop_cons"
 });
-
-Consultor.belongsToMany(EtapaPropuesta, {through: EtapaPropuestaConsultor,
-  foreignKey: "consultor_id",
-  otherKey: "etapa_propuesta_id",
-  as: "propuestas"
+Consultor.belongsToMany(EtapaPropuesta, {
+  through: EtapaPropuestaConsultor, foreignKey: "consultor_id",
+  otherKey: "etapa_propuesta_id", as: "propuestas", uniqueKey: "uniq_prop_cons"
 });
-
 
 // EJECUCIÓN
-EtapaEjecucion.belongsToMany(Consultor, {through: EtapaEjecucionConsultor,
-  foreignKey: "etapa_ejecucion_id",
-  otherKey: "consultor_id",
-  as: "consultores"
+EtapaEjecucion.belongsToMany(Consultor, {
+  through: EtapaEjecucionConsultor, foreignKey: "etapa_ejecucion_id",
+  otherKey: "consultor_id", as: "consultores", uniqueKey: "uniq_ejec_cons"
+});
+Consultor.belongsToMany(EtapaEjecucion, {
+  through: EtapaEjecucionConsultor, foreignKey: "consultor_id",
+  otherKey: "etapa_ejecucion_id", as: "ejecuciones", uniqueKey: "uniq_ejec_cons"
 });
 
-Consultor.belongsToMany(EtapaEjecucion, {through: EtapaEjecucionConsultor,
-  foreignKey: "consultor_id",
-  otherKey: "etapa_ejecucion_id",
-  as: "ejecuciones"
+// APROBACIÓN
+EtapaAprobacion.belongsToMany(Consultor, {
+  through: EtapaAprobacionConsultor, foreignKey: "etapa_aprobacion_id",
+  otherKey: "consultor_id", as: "consultores", uniqueKey: "uniq_aprob_cons"
 });
-
-
-// APROBACION
-EtapaAprobacion.belongsToMany(Consultor, {through: EtapaAprobacionConsultor,
-  foreignKey: "etapa_aprobacion_id",
-  otherKey: "consultor_id",
-  as: "consultores"
+Consultor.belongsToMany(EtapaAprobacion, {
+  through: EtapaAprobacionConsultor, foreignKey: "consultor_id",
+  otherKey: "etapa_aprobacion_id", as: "aprobaciones", uniqueKey: "uniq_aprob_cons"
 });
-
-Consultor.belongsToMany(EtapaAprobacion, {through: EtapaAprobacionConsultor,
-  foreignKey: "consultor_id",
-  otherKey: "etapa_aprobacion_id",
-  as: "aprobaciones"
-});
-
 
 // PRELIMINAR
-EtapaPreliminar.belongsToMany(Consultor, {through: EtapaPreliminarConsultor,
-  foreignKey: "etapa_preliminar_id",
-  otherKey: "consultor_id",
-  as: "consultores"
+EtapaPreliminar.belongsToMany(Consultor, {
+  through: EtapaPreliminarConsultor, foreignKey: "etapa_preliminar_id",
+  otherKey: "consultor_id", as: "consultores", uniqueKey: "uniq_prel_cons"
 });
-
-Consultor.belongsToMany(EtapaPreliminar, {through: EtapaPreliminarConsultor,
-  foreignKey: "consultor_id",
-  otherKey: "etapa_preliminar_id",
-  as: "preliminares"
+Consultor.belongsToMany(EtapaPreliminar, {
+  through: EtapaPreliminarConsultor, foreignKey: "consultor_id",
+  otherKey: "etapa_preliminar_id", as: "preliminares", uniqueKey: "uniq_prel_cons"
 });
-
-
 
 // ─────────────────────────────────────────────────────────
 // PROCESO  →  INTERACCIONES  (1:N)
@@ -206,8 +184,18 @@ Interaccion.belongsTo(Consultor, { foreignKey: "consultor_id", as: "consultor" }
 Consultor.hasMany(Interaccion,   { foreignKey: "consultor_id", as: "interacciones" });
 
 // ─────────────────────────────────────────────────────────
-// EXPORTAR — punto único de acceso a modelos
+// CHAT  →  MENSAJES  →  CONTEXTO
 // ─────────────────────────────────────────────────────────
+
+Consultor.hasMany(Chat, { foreignKey: "consultor_id", as: "chats", onDelete: "CASCADE" });
+Chat.belongsTo(Consultor, { foreignKey: "consultor_id", as: "consultor" });
+
+Chat.hasMany(Mensaje, { foreignKey: "chat_id", as: "mensajes", onDelete: "CASCADE" });
+Mensaje.belongsTo(Chat, { foreignKey: "chat_id", as: "chat" });
+
+Chat.hasOne(ContextoChat, { foreignKey: "chat_id", as: "contexto", onDelete: "CASCADE" });
+ContextoChat.belongsTo(Chat, { foreignKey: "chat_id", as: "chat" });
+
 export {
   Area,
   AsignacionHerramientas,
@@ -234,4 +222,7 @@ export {
   EtapaEjecucionConsultor,
   EtapaAprobacionConsultor,
   EtapaPreliminarConsultor,
+  Chat,
+  Mensaje,
+  ContextoChat,
 };

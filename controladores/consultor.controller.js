@@ -1,6 +1,7 @@
 import { Op }        from "sequelize";
 import { Consultor } from "../modelos/relations.js";
 import { emailValido } from "../utils/verifyEmail.js";
+import User from "../modelos/User.js";
 
 export const listarConsultores = async (req, res) => {
   try {
@@ -37,10 +38,11 @@ export const obtenerConsultor = async (req, res) => {
 
 export const crearConsultor = async (req, res) => {
   try {
-    const { nombre, email, rol = "consultor", telefono } = req.body;
+    const { nombre, email, rol = "consultor", telefono, password } = req.body;
 
     if (!nombre?.trim()) return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." });
     if (!email?.trim())  return res.status(400).json({ ok: false, mensaje: "'email' es obligatorio." });
+    if (!password?.trim()) return res.status(400).json({ ok: false, mensaje: "'password' es obligatorio." });
     if (!emailValido(email)) return res.status(400).json({ ok: false, mensaje: "Email inválido." });
     if (!["consultor", "admin"].includes(rol))
       return res.status(400).json({ ok: false, mensaje: "'rol' debe ser 'consultor' o 'admin'." });
@@ -48,7 +50,21 @@ export const crearConsultor = async (req, res) => {
     const existe = await Consultor.findOne({ where: { email: email.trim() } });
     if (existe) return res.status(409).json({ ok: false, mensaje: "Ya existe un consultor con ese email." });
 
-    const consultor = await Consultor.create({ nombre: nombre.trim(), email: email.trim(), rol, telefono });
+    const existeUser = await User.findOne({ where: { email: email.trim() } });
+    if (existeUser) return res.status(409).json({ ok: false, mensaje: "Ya existe un usuario con ese email." });
+
+    const [consultor] = await Promise.all([
+      Consultor.create({ nombre: nombre.trim(), email: email.trim(), rol, telefono }),
+      User.create({
+        nombre: nombre.trim(),
+        email:  email.trim(),
+        password: encrypt(password),
+        rol,
+        verificado: true,
+        activo: true,
+      }),
+    ]);
+
     return res.status(201).json({ ok: true, mensaje: "Consultor creado.", data: consultor });
   } catch (err) {
     console.error("[crearConsultor]", err);

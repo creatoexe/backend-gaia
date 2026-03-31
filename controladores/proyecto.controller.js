@@ -18,9 +18,9 @@ export const listarProyectos = async (req, res) => {
   try {
     const { clienteId, activo, search, page = 1, limit = 20 } = req.query;
     const where = {};
-    if (clienteId)           where.cliente_id = clienteId;
-    if (activo !== undefined) where.activo     = activo === "true";
-    if (search)              where.nombre      = { [Op.iLike]: `%${search.trim()}%` };
+    if (clienteId)            where.cliente_id = clienteId;
+    if (activo !== undefined)  where.activo     = activo === "true";
+    if (search)               where.nombre      = { [Op.iLike]: `%${search.trim()}%` };
 
     const offset = (Math.max(1, +page) - 1) * +limit;
     const { count, rows } = await Proyecto.findAndCountAll({
@@ -54,8 +54,8 @@ export const crearProyecto = async (req, res) => {
   try {
     const { cliente_id, nombre, descripcion, horas_estimadas, areas = [] } = req.body;
 
-    if (!cliente_id)      { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'cliente_id' es obligatorio." }); }
-    if (!nombre?.trim())  { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." }); }
+    if (!cliente_id)     { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'cliente_id' es obligatorio." }); }
+    if (!nombre?.trim()) { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." }); }
 
     if (horas_estimadas !== undefined && horas_estimadas !== null) {
       if (!Number.isInteger(Number(horas_estimadas)) || Number(horas_estimadas) < 0)
@@ -65,16 +65,31 @@ export const crearProyecto = async (req, res) => {
     const cliente = await Cliente.findByPk(cliente_id);
     if (!cliente) { await t.rollback(); return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." }); }
 
+    const tarifasSnapshot = {
+      precio_hora_desarrollo: cliente.precio_hora_desarrollo ?? null,
+      precio_hora_soporte:    cliente.precio_hora_soporte    ?? null,
+      precio_hora_cambio:     cliente.precio_hora_cambio     ?? null,
+      porcentaje_gobierno:    cliente.porcentaje_gobierno    ?? null,
+    };
+
+    // El hook beforeSave calculará costo_estimado usando precio_hora_desarrollo
+    // (ver modelo: usa proyecto.precio_hora_desarrollo || TARIFA_HORA)
     const proyecto = await Proyecto.create(
-      { cliente_id, nombre: nombre.trim(), descripcion, horas_estimadas: horas_estimadas || null },
+      {
+        cliente_id,
+        nombre:          nombre.trim(),
+        descripcion,
+        horas_estimadas: horas_estimadas || null,
+        ...tarifasSnapshot,
+      },
       { transaction: t }
     );
 
     await EstadoProyecto.create({
-      proyecto_id:  proyecto.id,
-      estado:       "Pendiente",
-      observacion:  "Proyecto creado",
-      fecha:        new Date(),
+      proyecto_id: proyecto.id,
+      estado:      "Lead",
+      observacion: "",
+      fecha:       new Date(),
     }, { transaction: t });
 
     if (areas.length > 0) {
@@ -100,7 +115,14 @@ export const actualizarProyecto = async (req, res) => {
     if (!proyecto) return res.status(404).json({ ok: false, mensaje: "Proyecto no encontrado." });
 
     const { nombre, descripcion, activo, horas_estimadas } = req.body;
-    await proyecto.update({ nombre, descripcion, activo, horas_estimadas: horas_estimadas ?? proyecto.horas_estimadas });
+    // Las tarifas NO se actualizan aquí: son un snapshot del momento de creación.
+    // Si se necesita re-sincronizar tarifas con el cliente, crear un endpoint dedicado.
+    await proyecto.update({
+      nombre,
+      descripcion,
+      activo,
+      horas_estimadas: horas_estimadas ?? proyecto.horas_estimadas,
+    });
 
     const resultado = await Proyecto.findByPk(proyecto.id, { include: INCLUDE_PROYECTO });
     return res.status(200).json({ ok: true, mensaje: "Proyecto actualizado.", data: resultado });
@@ -145,7 +167,6 @@ export const agregarAreas = async (req, res) => {
   }
 };
 
-/** DELETE /proyectos/:id/areas/:areaId */
 export const quitarArea = async (req, res) => {
   try {
     const eliminado = await ProyectoArea.destroy({
@@ -221,10 +242,10 @@ export const asignarHerramienta = async (req, res) => {
     if (!consultor)   return res.status(404).json({ ok: false, mensaje: "Consultor no encontrado." });
 
     const asignacion = await AsignacionHerramientas.create({
-      proyecto_id:      req.params.id,
+      proyecto_id:       req.params.id,
       herramienta_rpa_id,
       cod_licencia,
-      fecha_asignacion: fecha_asignacion || new Date(),
+      fecha_asignacion:  fecha_asignacion || new Date(),
       fecha_expiracion,
       asignado_por,
       motivo_cambio,
@@ -237,7 +258,6 @@ export const asignarHerramienta = async (req, res) => {
     return res.status(500).json({ ok: false, mensaje: "Error al asignar herramienta.", detalle: err.message });
   }
 };
-
 
 export const cambiarEstadoHerramienta = async (req, res) => {
   try {

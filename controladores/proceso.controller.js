@@ -11,7 +11,7 @@ import {
   EtapaAprobacion,
   EtapaEjecucion,
   Interaccion,
-}                    from "../modelos/relations.js";
+} from "../modelos/relations.js";
 
 export const listarProcesos = async (req, res) => {
   try {
@@ -166,10 +166,45 @@ export const eliminarProceso = async (req, res) => {
   }
 };
 
-const upsertEtapa = async (Modelo, procesoId, datos, res, nombreEtapa) => {
+// ─────────────────────────────────────────────────────────
+// HELPER: valida que todos los IDs existan en Consultor
+// ─────────────────────────────────────────────────────────
+const validarConsultores = async (ids) => {
+  if (!ids || !Array.isArray(ids) || ids.length === 0)
+    return { ok: false, mensaje: "'consultores_ids' debe ser un array no vacío." };
+
+  const encontrados = await Consultor.findAll({ where: { id: ids } });
+  if (encontrados.length !== ids.length) {
+    const encontradosIds = encontrados.map(c => c.id);
+    const faltantes = ids.filter(id => !encontradosIds.includes(id));
+    return { ok: false, mensaje: `Consultores no encontrados: ${faltantes.join(", ")}.` };
+  }
+  return { ok: true };
+};
+
+// ─────────────────────────────────────────────────────────
+// HELPER GENÉRICO: upsert etapa + asignar consultores (N:M)
+// ─────────────────────────────────────────────────────────
+const upsertEtapa = async ({
+  Modelo,
+  procesoId,
+  datos,
+  consultores_ids,
+  aliasSet,       // nombre del método set que genera Sequelize, ej: "setConsultores"
+  res,
+  nombreEtapa,
+}) => {
   try {
     const proceso = await Proceso.findByPk(procesoId);
-    if (!proceso) return res.status(404).json({ ok: false, mensaje: "Proceso no encontrado." });
+    if (!proceso)
+      return res.status(404).json({ ok: false, mensaje: "Proceso no encontrado." });
+
+    // Validar consultores si vienen en el body
+    if (consultores_ids !== undefined) {
+      const validacion = await validarConsultores(consultores_ids);
+      if (!validacion.ok)
+        return res.status(400).json({ ok: false, mensaje: validacion.mensaje });
+    }
 
     const [etapa, creada] = await Modelo.findOrCreate({
       where:    { proceso_id: procesoId },
@@ -177,6 +212,16 @@ const upsertEtapa = async (Modelo, procesoId, datos, res, nombreEtapa) => {
     });
 
     if (!creada) await etapa.update(datos);
+
+    // Sincroniza consultores solo si se envió el array (permite actualizaciones parciales)
+    if (consultores_ids !== undefined) {
+      await etapa[aliasSet](consultores_ids); // reemplaza la lista completa
+    }
+
+    // Recargar con consultores incluidos
+    await etapa.reload({
+      include: [{ model: Consultor, as: "consultores", attributes: ["id", "nombre"] }],
+    });
 
     return res.status(creada ? 201 : 200).json({
       ok:      true,
@@ -189,67 +234,108 @@ const upsertEtapa = async (Modelo, procesoId, datos, res, nombreEtapa) => {
   }
 };
 
+// ─────────────────────────────────────────────────────────
+// ETAPAS — cada una acepta { consultores_ids: [...] }
+// ─────────────────────────────────────────────────────────
+
+/** PUT /procesos/:id/levantamiento
+ *  Body: { consultores_ids, fecha_levantamiento, observaciones }
+ */
 export const upsertLevantamiento = (req, res) => {
-  const { consultor_id, fecha_levantamiento, observaciones } = req.body;
-  return upsertEtapa(
-    EtapaLevantamiento, req.params.id,
-    { consultor_id, fecha_levantamiento, observaciones }, res, "Levantamiento"
-  );
+  const { consultores_ids, fecha_levantamiento, observaciones } = req.body;
+  return upsertEtapa({
+    Modelo: EtapaLevantamiento,
+    procesoId: req.params.id,
+    datos: { fecha_levantamiento, observaciones },
+    consultores_ids,
+    aliasSet: "setConsultores",
+    res,
+    nombreEtapa: "Levantamiento",
+  });
 };
 
+/** PUT /procesos/:id/estimacion
+ *  Body: { consultores_ids, fecha_estimacion, observaciones }
+ */
 export const upsertEstimacion = (req, res) => {
-  const { consultor_id, fecha_estimacion, observaciones } = req.body;
-  return upsertEtapa(
-    EtapaEstimacion, req.params.id,
-    { consultor_id, fecha_estimacion, observaciones }, res, "Estimación"
-  );
+  const { consultores_ids, fecha_estimacion, observaciones } = req.body;
+  return upsertEtapa({
+    Modelo: EtapaEstimacion,
+    procesoId: req.params.id,
+    datos: { fecha_estimacion, observaciones },
+    consultores_ids,
+    aliasSet: "setConsultores",
+    res,
+    nombreEtapa: "Estimación",
+  });
 };
 
 export const upsertPropuesta = (req, res) => {
   const {
-    consultor_id, nivel_detalle, fecha_entrega_propuesta,
+    consultores_ids, nivel_detalle, fecha_entrega_propuesta,
     valor_presupuestado, horas_presupuestadas, observaciones,
   } = req.body;
-  return upsertEtapa(
-    EtapaPropuesta, req.params.id,
-    { consultor_id, nivel_detalle, fecha_entrega_propuesta, valor_presupuestado, horas_presupuestadas, observaciones },
-    res, "Propuesta"
-  );
+  return upsertEtapa({
+    Modelo: EtapaPropuesta,
+    procesoId: req.params.id,
+    datos: { nivel_detalle, fecha_entrega_propuesta, valor_presupuestado, horas_presupuestadas, observaciones },
+    consultores_ids,
+    aliasSet: "setConsultores",
+    res,
+    nombreEtapa: "Propuesta",
+  });
 };
 
+/** PUT /procesos/:id/preliminar
+ *  Body: { consultores_ids, fecha_preliminar, resultado, observaciones, viable }
+ */
 export const upsertPreliminar = (req, res) => {
-  const { fecha_preliminar, resultado, observaciones, viable } = req.body;
-  return upsertEtapa(
-    EtapaPreliminar, req.params.id,
-    { fecha_preliminar, resultado, observaciones, viable }, res, "Preliminar"
-  );
+  const { consultores_ids, fecha_preliminar, resultado, observaciones, viable } = req.body;
+  return upsertEtapa({
+    Modelo: EtapaPreliminar,
+    procesoId: req.params.id,
+    datos: { fecha_preliminar, resultado, observaciones, viable },
+    consultores_ids,
+    aliasSet: "setConsultores",
+    res,
+    nombreEtapa: "Preliminar",
+  });
 };
 
-/** PUT /procesos/:id/aprobacion */
+/** PUT /procesos/:id/aprobacion
+ *  Body: { consultores_ids, aprobado, fecha_aprobacion, motivo_rechazo, fecha_rechazo, observaciones }
+ */
 export const upsertAprobacion = async (req, res) => {
-  const { aprobado, fecha_aprobacion, motivo_rechazo, fecha_rechazo, observaciones } = req.body;
+  const { consultores_ids, aprobado, fecha_aprobacion, motivo_rechazo, fecha_rechazo, observaciones } = req.body;
 
   if (typeof aprobado !== "boolean")
     return res.status(400).json({ ok: false, mensaje: "'aprobado' debe ser boolean." });
   if (!aprobado && !motivo_rechazo)
     return res.status(400).json({ ok: false, mensaje: "'motivo_rechazo' es obligatorio cuando se rechaza." });
 
-  // Avanzar estatus automáticamente
   const proceso = await Proceso.findByPk(req.params.id);
   if (!proceso) return res.status(404).json({ ok: false, mensaje: "Proceso no encontrado." });
+
   await proceso.update({ estatus: aprobado ? "Aprobado" : "Rechazado" });
 
-  return upsertEtapa(
-    EtapaAprobacion, req.params.id,
-    { aprobado, fecha_aprobacion, motivo_rechazo, fecha_rechazo, observaciones }, res, "Aprobación"
-  );
+  return upsertEtapa({
+    Modelo: EtapaAprobacion,
+    procesoId: req.params.id,
+    datos: { aprobado, fecha_aprobacion, motivo_rechazo, fecha_rechazo, observaciones },
+    consultores_ids,
+    aliasSet: "setConsultores",
+    res,
+    nombreEtapa: "Aprobación",
+  });
 };
 
-/** PUT /procesos/:id/ejecucion */
+/** PUT /procesos/:id/ejecucion
+ *  Body: { consultores_ids, consultor_responsable_id, fecha_inicio, fecha_fin, horas_reales, observaciones }
+ */
 export const upsertEjecucion = async (req, res) => {
   const {
-    consultor_responsable_id, fecha_inicio,
-    fecha_fin, horas_reales, observaciones,
+    consultores_ids, consultor_responsable_id,
+    fecha_inicio, fecha_fin, horas_reales, observaciones,
   } = req.body;
 
   if (!fecha_inicio)
@@ -261,13 +347,20 @@ export const upsertEjecucion = async (req, res) => {
   const etapaExistente = await EtapaEjecucion.findOne({ where: { proceso_id: req.params.id } });
   if (!etapaExistente) await proceso.update({ estatus: "En Ejecución" });
 
-  return upsertEtapa(
-    EtapaEjecucion, req.params.id,
-    { consultor_responsable_id, fecha_inicio, fecha_fin, horas_reales, observaciones },
-    res, "Ejecución"
-  );
+  return upsertEtapa({
+    Modelo: EtapaEjecucion,
+    procesoId: req.params.id,
+    datos: { consultor_responsable_id, fecha_inicio, fecha_fin, horas_reales, observaciones },
+    consultores_ids,
+    aliasSet: "setConsultores",
+    res,
+    nombreEtapa: "Ejecución",
+  });
 };
 
+// ─────────────────────────────────────────────────────────
+// INTERACCIONES
+// ─────────────────────────────────────────────────────────
 export const listarInteracciones = async (req, res) => {
   try {
     const proceso = await Proceso.findByPk(req.params.id);

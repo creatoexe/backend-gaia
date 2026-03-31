@@ -1,41 +1,20 @@
 import { DataTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
+
 export const EtapaAprobacionConsultor = sequelize.define("EtapaAprobacionConsultor", {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true
-  },
-
+  id: { type: DataTypes.UUID, defaultValue: DataTypes.UUIDV4, primaryKey: true },
   etapa_aprobacion_id: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: "etapa_aprobacion",
-      key: "id"
-    },
-    onDelete: "CASCADE",
-    onUpdate: "CASCADE"
+    type: DataTypes.UUID, allowNull: false,
+    references: { model: "etapa_aprobacion", key: "id" },
+    onDelete: "CASCADE", onUpdate: "CASCADE"
   },
-
   consultor_id: {
-    type: DataTypes.UUID,
-    allowNull: false,
-    references: {
-      model: "consultores",
-      key: "id"
-    },
-    onDelete: "CASCADE",
-    onUpdate: "CASCADE"
+    type: DataTypes.UUID, allowNull: false,
+    references: { model: "consultores", key: "id" },
+    onDelete: "CASCADE", onUpdate: "CASCADE"
   }
-
 }, {
   tableName: "etapa_aprobacion_consultor",
   timestamps: false,
-    indexes: [
-  {
-    unique: true,
-    fields: ["etapa_aprobacion_id", "consultor_id"],
-    name: "uniq_lev_cons"
-  }]
+  indexes: [{ unique: true, fields: ["etapa_aprobacion_id", "consultor_id"], name: "uniq_aprob_cons" }]  
 });

@@ -13,25 +13,11 @@ export const Cliente = sequelize.define("Cliente", {
     type: DataTypes.STRING,
     allowNull: false
   },
-
-  email: {
-    type: DataTypes.STRING,
-    allowNull: true
-  },
-
-  telefono: {
-    type: DataTypes.STRING,
-    allowNull: true ,
-    maxlength: 20
-  },
-
   empresa: {
     type: DataTypes.STRING,
     allowNull: false ,
     maxlength: 100
   },
-   //  NUEVOS CAMPOS
-
   precio_hora_desarrollo: {
     type: DataTypes.DECIMAL(10,2),
     allowNull: true
@@ -51,13 +37,7 @@ export const Cliente = sequelize.define("Cliente", {
     type: DataTypes.DECIMAL(5,2),
     allowNull: true
   },
-
-  descuento_gobierno: {
-    type: DataTypes.DECIMAL(5,2),
-    allowNull: true
-  },
-
-  nota_gobierno: {
+  nota: {
     type: DataTypes.TEXT,
     allowNull: true
   }

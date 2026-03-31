@@ -36,14 +36,19 @@ export const Proyecto = sequelize.define("Proyecto", {
   },
   estado_actual: {
     type: DataTypes.ENUM(
+      "Lead",
       "Pendiente",
-      "En Análisis",
-      "En Revisión",
+      "Contactado",
+      "Levantamiento",
+      "Estimacion",
+      "Propuesta",
+      "En Aprobacion",
       "Aprobado",
-      "Activo",
-      "Pausado",
+      "Rechazado",
+      "En Ejecución",
       "Cerrado",
-      "Cancelado"
+      "Stand BY",
+      "Facturada"
     ),
     allowNull: false,
     defaultValue: "Pendiente",
@@ -52,17 +57,39 @@ export const Proyecto = sequelize.define("Proyecto", {
     type: DataTypes.BOOLEAN,
     defaultValue: false,
   },
+  precio_hora_desarrollo: {
+    type: DataTypes.DECIMAL(10,2),
+    allowNull: true
+  },
+
+  precio_hora_soporte: {
+    type: DataTypes.DECIMAL(10,2),
+    allowNull: true
+  },
+
+  precio_hora_cambio: {
+    type: DataTypes.DECIMAL(10,2),
+    allowNull: true
+  },
+
+  porcentaje_gobierno: {
+    type: DataTypes.DECIMAL(5,2),
+    allowNull: true
+  },
 }, {
   tableName: "proyectos",
   timestamps: true,
-  hooks: {
-    beforeSave(proyecto) {
-      if (proyecto.horas_estimadas != null) {
-        proyecto.costo_estimado = parseFloat((proyecto.horas_estimadas * TARIFA_HORA).toFixed(2));
-      } else {
-        proyecto.costo_estimado = null;
-      }
-      proyecto.activo = proyecto.estado_actual === "Activo";
-    },
+ hooks: {
+  beforeSave(proyecto) {
+    const tarifa = proyecto.precio_hora_desarrollo != null
+      ? parseFloat(proyecto.precio_hora_desarrollo)
+      : TARIFA_HORA; 
+    if (proyecto.horas_estimadas != null) {
+      proyecto.costo_estimado = parseFloat((proyecto.horas_estimadas * tarifa).toFixed(2));
+    } else {
+      proyecto.costo_estimado = null;
+    }
+    proyecto.activo = proyecto.estado_actual === "Lead";
   },
+},
 });
