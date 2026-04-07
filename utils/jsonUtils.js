@@ -1,18 +1,25 @@
 export const cleanJsonString = (raw) => {
   let s = raw.trim();
-  
+
+  // Eliminar backticks de markdown
+  s = s.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+
+  // Eliminar comillas externas que envuelven todo el JSON
   if (s.startsWith('"') && s.endsWith('"')) {
-    s = s.slice(1, -1);
+    try {
+      s = JSON.parse(s); // desescapa el string completo
+    } catch {
+      s = s.slice(1, -1);
+    }
   }
-  
-  s = s.replace(/^```(?:json)?\s*/, '').replace(/\s*```$/, '');
-  
+
+  // Extraer solo el objeto JSON
   const start = s.indexOf('{');
   const end = s.lastIndexOf('}');
   if (start !== -1 && end !== -1) {
     s = s.substring(start, end + 1);
   }
-  
+
   return s;
 };
 

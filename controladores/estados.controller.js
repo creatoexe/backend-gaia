@@ -1,0 +1,46 @@
+import { Estados } from "../modelos/relations.js";
+
+export const listar = async (req, res) => {
+  try {
+    const estados = await Estados.findAll({
+      where: { activo: true },
+      order: [["nombre", "ASC"]],
+    });
+    res.json({ ok: true, data: estados });
+  } catch (err) {
+    res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const crear = async (req, res) => {
+  try {
+    const { nombre } = req.body;
+    if (!nombre?.trim()) return res.status(400).json({ ok: false, mensaje: "'nombre' es requerido" });
+    const estado = await Estados.create({ nombre: nombre.trim() });
+    res.status(201).json({ ok: true, data: estado });
+  } catch (err) {
+    res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const actualizar = async (req, res) => {
+  try {
+    const estado = await Estados.findByPk(req.params.id);
+    if (!estado) return res.status(404).json({ ok: false, mensaje: "Estado no encontrado" });
+    await estado.update(req.body);
+    res.json({ ok: true, data: estado });
+  } catch (err) {
+    res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const eliminar = async (req, res) => {
+  try {
+    const estado = await Estados.findByPk(req.params.id);
+    if (!estado) return res.status(404).json({ ok: false, mensaje: "Estado no encontrado" });
+    await estado.update({ activo: false });
+    res.json({ ok: true, mensaje: "Estado desactivado" });
+  } catch (err) {
+    res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};

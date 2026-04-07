@@ -14,24 +14,11 @@ export const EstadoProyecto = sequelize.define("EstadoProyecto", {
     onDelete: "CASCADE",
     onUpdate: "CASCADE",
   },
-  estado: {
-    type: DataTypes.ENUM(
-      "Lead",
-      "Pendiente",
-      "Contactado",
-      "Levantamiento",
-      "Estimacion",
-      "Propuesta",
-      "En Aprobacion",
-      "Aprobado",
-      "Rechazado",
-      "En Ejecución",
-      "Cerrado",
-      "Stand BY",
-      "Facturada"
-    ),
-    allowNull: false,
-  },
+  estado_id: {
+  type: DataTypes.UUID,
+  allowNull: true,
+  references: { model: "estados", key: "id" },
+},
   observacion: {
     type: DataTypes.TEXT,
     allowNull: true,

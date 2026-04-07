@@ -1,4 +1,4 @@
-import { Op }        from "sequelize";
+import { Op } from "sequelize";
 import { sequelize } from "../config/database.js";
 import {
   Proyecto,
@@ -11,16 +11,17 @@ import {
   HerramientaRpa,
   Consultor,
   EstadoProyecto,
-}                    from "../modelos/relations.js";
+} from "../modelos/relations.js";
 import { INCLUDE_PROYECTO } from "../Helpers/h_proyecto.js";
+import { getEstadoId, resolverEstadoId } from "../Helpers/h_estados.js";
 
 export const listarProyectos = async (req, res) => {
   try {
     const { clienteId, activo, search, page = 1, limit = 20 } = req.query;
     const where = {};
-    if (clienteId)            where.cliente_id = clienteId;
-    if (activo !== undefined)  where.activo     = activo === "true";
-    if (search)               where.nombre      = { [Op.iLike]: `%${search.trim()}%` };
+    if (clienteId) where.cliente_id = clienteId;
+    if (activo !== undefined) where.activo = activo === "true";
+    if (search) where.nombre = { [Op.iLike]: `%${search.trim()}%` };
 
     const offset = (Math.max(1, +page) - 1) * +limit;
     const { count, rows } = await Proyecto.findAndCountAll({
@@ -54,7 +55,7 @@ export const crearProyecto = async (req, res) => {
   try {
     const { cliente_id, nombre, descripcion, horas_estimadas, areas = [] } = req.body;
 
-    if (!cliente_id)     { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'cliente_id' es obligatorio." }); }
+    if (!cliente_id) { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'cliente_id' es obligatorio." }); }
     if (!nombre?.trim()) { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." }); }
 
     if (horas_estimadas !== undefined && horas_estimadas !== null) {
@@ -67,31 +68,26 @@ export const crearProyecto = async (req, res) => {
 
     const tarifasSnapshot = {
       precio_hora_desarrollo: cliente.precio_hora_desarrollo ?? null,
-      precio_hora_soporte:    cliente.precio_hora_soporte    ?? null,
-      precio_hora_cambio:     cliente.precio_hora_cambio     ?? null,
-      porcentaje_gobierno:    cliente.porcentaje_gobierno    ?? null,
+      precio_hora_soporte: cliente.precio_hora_soporte ?? null,
+      precio_hora_cambio: cliente.precio_hora_cambio ?? null,
+      porcentaje_gobierno: cliente.porcentaje_gobierno ?? null,
     };
 
-    // El hook beforeSave calculará costo_estimado usando precio_hora_desarrollo
-    // (ver modelo: usa proyecto.precio_hora_desarrollo || TARIFA_HORA)
-    const proyecto = await Proyecto.create(
-      {
-        cliente_id,
-        nombre:          nombre.trim(),
-        descripcion,
-        horas_estimadas: horas_estimadas || null,
-        ...tarifasSnapshot,
-      },
-      { transaction: t }
-    );
+const proyecto = await Proyecto.create({
+  cliente_id,
+  nombre: nombre.trim(),
+  descripcion,
+  horas_estimadas: horas_estimadas || null,
+  estado_id: await getEstadoId("Lead"),   
+  ...tarifasSnapshot,
+}, { transaction: t });
 
     await EstadoProyecto.create({
       proyecto_id: proyecto.id,
-      estado:      "Lead",
+      estado_id: await getEstadoId("Lead"),
       observacion: "",
-      fecha:       new Date(),
+      fecha: new Date(),
     }, { transaction: t });
-
     if (areas.length > 0) {
       await ProyectoArea.bulkCreate(
         areas.map((area_id) => ({ proyecto_id: proyecto.id, area_id })),
@@ -188,17 +184,17 @@ export const agregarMiembro = async (req, res) => {
 
     const { usuario_cliente_id, rol_id, nota } = req.body;
     if (!usuario_cliente_id) return res.status(400).json({ ok: false, mensaje: "'usuario_cliente_id' es obligatorio." });
-    if (!rol_id)             return res.status(400).json({ ok: false, mensaje: "'rol_id' es obligatorio." });
+    if (!rol_id) return res.status(400).json({ ok: false, mensaje: "'rol_id' es obligatorio." });
 
     const [usuario, rol] = await Promise.all([
       UsuarioCliente.findByPk(usuario_cliente_id),
       Rol.findByPk(rol_id),
     ]);
     if (!usuario) return res.status(404).json({ ok: false, mensaje: "Usuario no encontrado." });
-    if (!rol)     return res.status(404).json({ ok: false, mensaje: "Rol no encontrado." });
+    if (!rol) return res.status(404).json({ ok: false, mensaje: "Rol no encontrado." });
 
     const [asignacion, creado] = await ProyectoUsuarioRol.findOrCreate({
-      where:    { proyecto_id: req.params.id, usuario_cliente_id, rol_id },
+      where: { proyecto_id: req.params.id, usuario_cliente_id, rol_id },
       defaults: { nota, activo: true },
     });
 
@@ -232,20 +228,20 @@ export const asignarHerramienta = async (req, res) => {
 
     const { herramienta_rpa_id, cod_licencia, fecha_asignacion, fecha_expiracion, asignado_por, motivo_cambio } = req.body;
     if (!herramienta_rpa_id) return res.status(400).json({ ok: false, mensaje: "'herramienta_rpa_id' es obligatorio." });
-    if (!asignado_por)       return res.status(400).json({ ok: false, mensaje: "'asignado_por' (consultor) es obligatorio." });
+    if (!asignado_por) return res.status(400).json({ ok: false, mensaje: "'asignado_por' (consultor) es obligatorio." });
 
     const [herramienta, consultor] = await Promise.all([
       HerramientaRpa.findByPk(herramienta_rpa_id),
       Consultor.findByPk(asignado_por),
     ]);
     if (!herramienta) return res.status(404).json({ ok: false, mensaje: "Herramienta no encontrada." });
-    if (!consultor)   return res.status(404).json({ ok: false, mensaje: "Consultor no encontrado." });
+    if (!consultor) return res.status(404).json({ ok: false, mensaje: "Consultor no encontrado." });
 
     const asignacion = await AsignacionHerramientas.create({
-      proyecto_id:       req.params.id,
+      proyecto_id: req.params.id,
       herramienta_rpa_id,
       cod_licencia,
-      fecha_asignacion:  fecha_asignacion || new Date(),
+      fecha_asignacion: fecha_asignacion || new Date(),
       fecha_expiracion,
       asignado_por,
       motivo_cambio,

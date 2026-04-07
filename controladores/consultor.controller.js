@@ -1,14 +1,20 @@
-import { Op }        from "sequelize";
+import { Op } from "sequelize";
 import { Consultor } from "../modelos/relations.js";
 import { emailValido } from "../utils/verifyEmail.js";
 import User from "../modelos/User.js";
+import CryptoJS from "crypto-js";
+import crypto from "crypto";
+import { sendVerificationEmail } from "../services/emailService.js";
+
+// ─── Helper: encriptar contraseña ────────────────────────────
+const encriptar = (password) => CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
 
 export const listarConsultores = async (req, res) => {
   try {
     const { activo, rol, search, page = 1, limit = 20 } = req.query;
     const where = {};
     if (activo !== undefined) where.activo = activo === "true";
-    if (rol)   where.rol    = rol;
+    if (rol) where.rol = rol;
     if (search) where.nombre = { [Op.iLike]: `%${search.trim()}%` };
 
     const offset = (Math.max(1, +page) - 1) * +limit;
@@ -38,34 +44,53 @@ export const obtenerConsultor = async (req, res) => {
 
 export const crearConsultor = async (req, res) => {
   try {
-    const { nombre, email, rol = "consultor", telefono, password } = req.body;
+    const { nombre, email, rol = "consultor", telefono, fecha_ingreso } = req.body;
 
     if (!nombre?.trim()) return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." });
-    if (!email?.trim())  return res.status(400).json({ ok: false, mensaje: "'email' es obligatorio." });
-    if (!password?.trim()) return res.status(400).json({ ok: false, mensaje: "'password' es obligatorio." });
+    if (!email?.trim()) return res.status(400).json({ ok: false, mensaje: "'email' es obligatorio." });
     if (!emailValido(email)) return res.status(400).json({ ok: false, mensaje: "Email inválido." });
     if (!["consultor", "admin"].includes(rol))
       return res.status(400).json({ ok: false, mensaje: "'rol' debe ser 'consultor' o 'admin'." });
 
-    const existe = await Consultor.findOne({ where: { email: email.trim() } });
-    if (existe) return res.status(409).json({ ok: false, mensaje: "Ya existe un consultor con ese email." });
-
-    const existeUser = await User.findOne({ where: { email: email.trim() } });
+    const [existeConsultor, existeUser] = await Promise.all([
+      Consultor.findOne({ where: { email: email.trim() } }),
+      User.findOne({ where: { email: email.trim() } }),
+    ]);
+    if (existeConsultor) return res.status(409).json({ ok: false, mensaje: "Ya existe un consultor con ese email." });
     if (existeUser) return res.status(409).json({ ok: false, mensaje: "Ya existe un usuario con ese email." });
+    if (fecha_ingreso && fecha_ingreso > new Date().toISOString().slice(0, 10)) {
+      return res.status(400).json({ ok: false, mensaje: "La fecha de ingreso no puede ser futura." });
+    }
+    const passwordPlano = crypto.randomBytes(8).toString("hex");
+    const passwordHash = encriptar(passwordPlano);
+    const token = crypto.randomBytes(32).toString("hex");
 
     const [consultor] = await Promise.all([
-      Consultor.create({ nombre: nombre.trim(), email: email.trim(), rol, telefono }),
+      Consultor.create({
+        nombre: nombre.trim(),
+        email: email.trim(),
+        rol,
+        telefono,
+        fecha_ingreso: fecha_ingreso ?? null,
+      }),
       User.create({
         nombre: nombre.trim(),
-        email:  email.trim(),
-        password: encrypt(password),
+        email: email.trim(),
+        password: passwordHash,
         rol,
-        verificado: true,
+        verificado: false,
         activo: true,
+        token,
       }),
     ]);
 
-    return res.status(201).json({ ok: true, mensaje: "Consultor creado.", data: consultor });
+    await sendVerificationEmail(email.trim(), nombre.trim(), token, passwordPlano);
+
+    return res.status(201).json({
+      ok: true,
+      mensaje: "Consultor creado. Credenciales enviadas por email.",
+      data: consultor,
+    });
   } catch (err) {
     console.error("[crearConsultor]", err);
     return res.status(500).json({ ok: false, mensaje: "Error al crear consultor.", detalle: err.message });
@@ -77,7 +102,7 @@ export const actualizarConsultor = async (req, res) => {
     const consultor = await Consultor.findByPk(req.params.id);
     if (!consultor) return res.status(404).json({ ok: false, mensaje: "Consultor no encontrado." });
 
-    const { nombre, email, rol, telefono, activo } = req.body;
+    const { nombre, email, rol, telefono, activo, fecha_ingreso } = req.body;
 
     if (email && email !== consultor.email) {
       if (!emailValido(email)) return res.status(400).json({ ok: false, mensaje: "Email inválido." });
@@ -86,8 +111,24 @@ export const actualizarConsultor = async (req, res) => {
     }
     if (rol && !["consultor", "admin"].includes(rol))
       return res.status(400).json({ ok: false, mensaje: "'rol' inválido." });
+    if (fecha_ingreso && fecha_ingreso > new Date().toISOString().slice(0, 10)) {
+      return res.status(400).json({ ok: false, mensaje: "La fecha de ingreso no puede ser futura." });
+    }
+    await Promise.all([
+      consultor.update({
+        nombre,
+        email,
+        rol,
+        telefono,
+        activo,
+        fecha_ingreso: fecha_ingreso !== undefined ? fecha_ingreso ?? null : consultor.fecha_ingreso,
+      }),
+      User.update(
+        { nombre, email, rol, activo },
+        { where: { email: consultor.email } }
+      ),
+    ]);
 
-    await consultor.update({ nombre, email, rol, telefono, activo });
     return res.status(200).json({ ok: true, mensaje: "Consultor actualizado.", data: consultor });
   } catch (err) {
     console.error("[actualizarConsultor]", err);
@@ -100,7 +141,11 @@ export const eliminarConsultor = async (req, res) => {
     const consultor = await Consultor.findByPk(req.params.id);
     if (!consultor) return res.status(404).json({ ok: false, mensaje: "Consultor no encontrado." });
 
-    await consultor.update({ activo: false });
+    await Promise.all([
+      consultor.update({ activo: false }),
+      User.update({ activo: false }, { where: { email: consultor.email } }),
+    ]);
+
     return res.status(200).json({ ok: true, mensaje: "Consultor desactivado." });
   } catch (err) {
     console.error("[eliminarConsultor]", err);

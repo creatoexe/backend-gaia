@@ -13,6 +13,7 @@ import {
   Interaccion,
 } from "../modelos/relations.js";
 
+
 export const listarProcesos = async (req, res) => {
   try {
     const { proyectoId, estatus, tipo, page = 1, limit = 20 } = req.query;
@@ -82,18 +83,18 @@ export const crearProceso = async (req, res) => {
     }
 
     const proceso = await Proceso.create({
-      proyecto_id: proyectoId,
-      nombre_proceso: nombre_proceso.trim(),
-      tipo: tipo || null,
-      tipo_proceso,
-      estatus,
-      prioridad,
-      probabilidad_aprobacion,
-      plazo_inicio,
-      herramienta_rpa_id,
-      accion_responsable,
-      fecha_lead: new Date(),
-    });
+  proyecto_id: proyectoId,
+  nombre_proceso: nombre_proceso.trim(),
+  tipo: tipo || null,
+  tipo_proceso,
+  estado_id: await resolverEstadoId(estatus ?? "Lead"),  
+  prioridad,
+  probabilidad_aprobacion,
+  plazo_inicio,
+  herramienta_rpa_id,
+  accion_responsable,
+  fecha_lead: new Date(),
+});
 
     const resultado = await Proceso.findByPk(proceso.id, { include: INCLUDE_PROCESO });
     return res.status(201).json({ ok: true, mensaje: "Proceso creado.", data: resultado });
@@ -139,17 +140,19 @@ export const cambiarEstatus = async (req, res) => {
     if (!proceso) return res.status(404).json({ ok: false, mensaje: "Proceso no encontrado." });
 
     const { estatus } = req.body;
-    if (!ESTATUS_VALIDOS.includes(estatus))
-      return res.status(400).json({ ok: false, mensaje: `Estatus inválido. Válidos: ${ESTATUS_VALIDOS.join(", ")}.` });
+    if (!estatus) return res.status(400).json({ ok: false, mensaje: "'estatus' es requerido." });
+
+    const estado_id = await resolverEstadoId(estatus).catch(() => null);
+    if (!estado_id) return res.status(400).json({ ok: false, mensaje: `Estatus '${estatus}' no encontrado.` });
 
     const fechas = {};
-    if (estatus === "Contactado" && !proceso.fecha_contactado) fechas.fecha_contactado = new Date();
+    if (estatus === "Contactado" && !proceso.fecha_contactado)
+      fechas.fecha_contactado = new Date();
 
-    await proceso.update({ estatus, ...fechas });
+    await proceso.update({ estado_id, ...fechas });
     return res.status(200).json({ ok: true, mensaje: `Estatus actualizado a '${estatus}'.`, data: proceso });
   } catch (err) {
-    console.error("[cambiarEstatus]", err);
-    return res.status(500).json({ ok: false, mensaje: "Error al cambiar estatus.", detalle: err.message });
+    return res.status(500).json({ ok: false, mensaje: err.message });
   }
 };
 
@@ -316,8 +319,9 @@ export const upsertAprobacion = async (req, res) => {
   const proceso = await Proceso.findByPk(req.params.id);
   if (!proceso) return res.status(404).json({ ok: false, mensaje: "Proceso no encontrado." });
 
-  await proceso.update({ estatus: aprobado ? "Aprobado" : "Rechazado" });
-
+await proceso.update({
+  estado_id: await getEstadoId(aprobado ? "Aprobado" : "Rechazado"),
+});
   return upsertEtapa({
     Modelo: EtapaAprobacion,
     procesoId: req.params.id,
@@ -345,8 +349,9 @@ export const upsertEjecucion = async (req, res) => {
   if (!proceso) return res.status(404).json({ ok: false, mensaje: "Proceso no encontrado." });
 
   const etapaExistente = await EtapaEjecucion.findOne({ where: { proceso_id: req.params.id } });
-  if (!etapaExistente) await proceso.update({ estatus: "En Ejecución" });
-
+if (!etapaExistente) {
+  await proceso.update({ estado_id: await getEstadoId("En Ejecución") });
+}
   return upsertEtapa({
     Modelo: EtapaEjecucion,
     procesoId: req.params.id,

@@ -1,8 +1,3 @@
-// ============================================================
-// modelos/relations.js
-// Todas las asociaciones Sequelize — importar UNA sola vez en index.js
-// ============================================================
-
 import { Area }                   from "./Area.js";
 import { AsignacionHerramientas } from "./AsignacionHerramientas.js";
 import { Cliente }                from "./Cliente.js";
@@ -30,8 +25,13 @@ import { EtapaAprobacionConsultor }    from "./EtapaAprobacionConsultor.js";
 import { EtapaPreliminarConsultor }    from "./EtapaPreliminarConsultor.js";
 import { Chat }         from "./Chat.js";
 import { ContextoChat } from "./ContextoChat.js";
-import {Mensaje} from './Mensajes.js'
-
+import { Mensaje }      from "./Mensajes.js";
+import User             from "./User.js";
+import { Pais }               from "./Pais.js";
+import { Ciudad }             from "./Ciudad.js";
+import { Rubro }              from "./Rubro.js";
+import { SeguimientoCliente } from "./SeguimientoCliente.js";
+import { Estados }             from "./Estados.js";
 // ─────────────────────────────────────────────────────────
 // CLIENTE  →  PROYECTOS / USUARIOS
 // ─────────────────────────────────────────────────────────
@@ -184,17 +184,46 @@ Interaccion.belongsTo(Consultor, { foreignKey: "consultor_id", as: "consultor" }
 Consultor.hasMany(Interaccion,   { foreignKey: "consultor_id", as: "interacciones" });
 
 // ─────────────────────────────────────────────────────────
-// CHAT  →  MENSAJES  →  CONTEXTO
+// CHAT  →  MENSAJES  →  CONTEXTO  (asociado a User)
 // ─────────────────────────────────────────────────────────
+User.hasMany(Chat,   { foreignKey: "user_id", as: "chats", onDelete: "CASCADE" });
+Chat.belongsTo(User, { foreignKey: "user_id", as: "user" });
 
-Consultor.hasMany(Chat, { foreignKey: "consultor_id", as: "chats", onDelete: "CASCADE" });
-Chat.belongsTo(Consultor, { foreignKey: "consultor_id", as: "consultor" });
+Chat.hasMany(Mensaje,    { foreignKey: "chat_id", as: "mensajes", onDelete: "CASCADE" });
+Mensaje.belongsTo(Chat,  { foreignKey: "chat_id", as: "chat" });
 
-Chat.hasMany(Mensaje, { foreignKey: "chat_id", as: "mensajes", onDelete: "CASCADE" });
-Mensaje.belongsTo(Chat, { foreignKey: "chat_id", as: "chat" });
-
-Chat.hasOne(ContextoChat, { foreignKey: "chat_id", as: "contexto", onDelete: "CASCADE" });
+Chat.hasOne(ContextoChat,    { foreignKey: "chat_id", as: "contexto", onDelete: "CASCADE" });
 ContextoChat.belongsTo(Chat, { foreignKey: "chat_id", as: "chat" });
+
+// ─── Pais → Ciudad ──────────────────────────────────────────
+Pais.hasMany(Ciudad,   { foreignKey: "pais_id", as: "ciudades" });
+Ciudad.belongsTo(Pais, { foreignKey: "pais_id", as: "pais"     });
+
+// ─── Cliente → Pais / Ciudad / Rubro ────────────────────────
+Cliente.belongsTo(Pais,   { foreignKey: "pais_id",    as: "pais"   });
+Cliente.belongsTo(Ciudad, { foreignKey: "ciudad_id",  as: "ciudad" });
+Cliente.belongsTo(Rubro,  { foreignKey: "rubro_id",   as: "rubro"  });
+
+// ─── Cliente → Seguimientos ──────────────────────────────────
+Cliente.hasMany(SeguimientoCliente, {
+  foreignKey: "cliente_id", as: "seguimientos", onDelete: "CASCADE",
+});
+SeguimientoCliente.belongsTo(Cliente,       { foreignKey: "cliente_id" });
+SeguimientoCliente.belongsTo(Consultor,     { foreignKey: "consultor_id",      as: "consultor"      });
+SeguimientoCliente.belongsTo(UsuarioCliente,{ foreignKey: "usuario_cliente_id", as: "contacto_cliente" });
+
+// ─── Estados → Cliente / Proyecto / Proceso / EstadoProyecto ─
+Cliente.belongsTo(Estados,       { foreignKey: "estado_id", as: "estadoObj" });
+Estados.hasMany(Cliente,         { foreignKey: "estado_id" });
+
+Proyecto.belongsTo(Estados,      { foreignKey: "estado_id", as: "estadoObj" });
+Estados.hasMany(Proyecto,        { foreignKey: "estado_id" });
+
+Proceso.belongsTo(Estados,       { foreignKey: "estado_id", as: "estadoObj" });
+Estados.hasMany(Proceso,         { foreignKey: "estado_id" });
+
+EstadoProyecto.belongsTo(Estados,{ foreignKey: "estado_id", as: "estadoObj" });
+Estados.hasMany(EstadoProyecto,  { foreignKey: "estado_id" });
 
 export {
   Area,
@@ -225,4 +254,10 @@ export {
   Chat,
   Mensaje,
   ContextoChat,
+  User,
+  Pais,
+  Ciudad,
+  Rubro,
+  SeguimientoCliente,
+  Estados,
 };

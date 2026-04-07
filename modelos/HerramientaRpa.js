@@ -11,15 +11,7 @@ export const HerramientaRpa = sequelize.define("herramientas_rpa", {
         type: DataTypes.STRING,
         allowNull: false
     },
-    descripcion: {
-        type: DataTypes.TEXT,
-        allowNull: true
-    },
     fabricante: {
-        type: DataTypes.STRING,
-        allowNull: true
-    },
-    version: {
         type: DataTypes.STRING,
         allowNull: true
     },

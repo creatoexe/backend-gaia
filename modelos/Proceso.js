@@ -40,22 +40,11 @@ export const Proceso = sequelize.define("Proceso", {
     )
   },
 
-  estatus:{
-    type:DataTypes.ENUM(
-      "Lead",
-      "Contactado",
-      "Levantamiento",
-      "Estimacion",
-      "Propuesta",
-      "En Aprobacion",
-      "Aprobado",
-      "Rechazado",
-      "En Ejecución",
-      "Cerrado",
-      "Stand BY",
-      "Facturada"
-    )
-  },
+  estado_id: {
+  type: DataTypes.UUID,
+  allowNull: true,
+  references: { model: "estados", key: "id" },
+},
 
   probabilidad_aprobacion:{
     type:DataTypes.STRING

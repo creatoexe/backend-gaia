@@ -21,7 +21,7 @@ export const Mensaje = sequelize.define("Mensaje", {
   },
 
   contenido: {
-    type: DataTypes.TEXT,
+    type: DataTypes.TEXT("long"),
     allowNull: false
   },
 

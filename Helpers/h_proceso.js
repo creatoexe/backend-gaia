@@ -9,10 +9,13 @@ import {
   EtapaAprobacion,
   EtapaEjecucion,
   Interaccion,
+  Estados
 }                    from "../modelos/relations.js";
+
 
 export const INCLUDE_PROCESO = [
   { model: Proyecto,        as: "proyecto",    attributes: ["id", "nombre"] },
+  { model: Estados, as: "estadoObj", attributes: ["id", "nombre"] },
   { model: HerramientaRpa,  as: "herramienta", attributes: ["id", "nombre"] },
   { model: EtapaLevantamiento, as: "levantamiento",
     include: [{ model: Consultor, as: "consultores", attributes: ["id", "nombre"] }] },

@@ -7,11 +7,13 @@ import {
   HerramientaRpa,
   Consultor,
   EstadoProyecto,
+  Estados
 }                    from "../modelos/relations.js";
 
 
 export const INCLUDE_PROYECTO = [
   { model: Cliente, as: "cliente", attributes: ["id", "nombre", "empresa","precio_hora_desarrollo" , "precio_hora_soporte" , "precio_hora_cambio" , "porcentaje_gobierno"] },
+  { model: Estados, as: "estadoObj", attributes: ["id", "nombre"] },
   { model: Area,    as: "areas",   attributes: ["id", "nombre"], through: { attributes: [] } },
   {
     model:   UsuarioCliente,

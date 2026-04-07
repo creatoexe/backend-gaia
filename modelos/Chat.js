@@ -1,5 +1,5 @@
 import { DataTypes } from "sequelize";
-import { sequelize }  from "../config/database.js";
+import { sequelize } from "../config/database.js";
 
 export const Chat = sequelize.define("Chat", {
   id: {
@@ -8,10 +8,10 @@ export const Chat = sequelize.define("Chat", {
     primaryKey: true
   },
 
-  consultor_id: {
+  user_id: {
     type: DataTypes.UUID,
     allowNull: false,
-    references: { model: "consultores", key: "id" }
+    references: { model: "users", key: "id" }
   },
 
   titulo: {

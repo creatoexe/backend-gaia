@@ -18,8 +18,6 @@ tableName: "clientes"  |  timestamps: true
   id                    UUID PK
   nombre                VARCHAR NOT NULL
   empresa               VARCHAR NOT NULL
-  email                 VARCHAR
-  telefono              VARCHAR
   precio_hora_desarrollo DECIMAL(10,2)
   precio_hora_soporte    DECIMAL(10,2)
   precio_hora_cambio     DECIMAL(10,2)
@@ -82,8 +80,12 @@ tableName: "proyectos"  |  timestamps: true
   descripcion     TEXT
   horas_estimadas INT
   costo_estimado  DECIMAL(12,2)   ← calculado automáticamente (horas * 10)
-  estado_actual   ENUM('Pendiente','En Análisis','En Revisión','Aprobado','Activo','Pausado','Cerrado','Cancelado') DEFAULT 'Pendiente'
+  estado_actual   ENUM('Lead' , 'Pendiente' 'Contactado' , 'Levantamiento' , 'Estimacion' , 'Propuesta' , 'En Aprobacion' , 'Aprobado' , 'Rechazado' , 'En Ejecución' , 'Cerrado' , 'Stand BY' , 'Facturada') DEFAULT 'Lead'
   activo          BOOLEAN DEFAULT false  ← true solo si estado_actual = 'Activo'
+  precio_hora_desarrollo DECIMAL(10,2) ← opcional, puede heredar de cliente
+  precio_hora_soporte    DECIMAL(10,2) ← opcional, puede heredar de cliente
+  precio_hora_cambio     DECIMAL(10,2) ← opcional, puede heredar de cliente
+  porcentaje_gobierno   DECIMAL(5,2)  ← opcional, puede heredar de cliente
   createdAt, updatedAt DATETIME
 
 ── proyecto_area  (pivote N:M proyectos↔areas) ──────────

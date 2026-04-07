@@ -30,6 +30,10 @@ export const UsuarioCliente = sequelize.define("usuario_cliente", {
         allowNull: true,
         maxlength: 20
     },
+    linkedin: {
+        type: DataTypes.STRING,
+        allowNull: true
+    },
     cargo: {
         type: DataTypes.STRING,
         allowNull: true

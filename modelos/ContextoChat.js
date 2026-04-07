@@ -17,19 +17,16 @@ export const ContextoChat = sequelize.define("ContextoChat", {
   },
 
   resumen: {
-    type: DataTypes.TEXT,
+    type: DataTypes.TEXT("long"),
     allowNull: true,
     defaultValue: null
   },
-
-  // Cuántos mensajes ya fueron resumidos (para saber desde dónde retomar)
   mensajes_resumidos: {
     type: DataTypes.INTEGER,
     allowNull: false,
     defaultValue: 0
   },
 
-  // Tokens totales acumulados en el chat (para decidir cuándo resumir)
   tokens_acumulados: {
     type: DataTypes.INTEGER,
     allowNull: false,

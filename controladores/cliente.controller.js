@@ -1,35 +1,48 @@
-import { Op }            from "sequelize";
-import { sequelize }     from "../config/database.js";
+import { Op } from "sequelize";
+import { sequelize } from "../config/database.js";
 import {
   Cliente,
   UsuarioCliente,
-}                        from "../modelos/relations.js";
-import { INCLUDE_CLIENTE } from "../Helpers/includeCliente.js";
+  SeguimientoCliente,
+  Consultor,
+  Pais,
+  Ciudad,
+  Rubro,
+} from "../modelos/relations.js";
 import { emailValido } from "../utils/verifyEmail.js";
+import { callSeguimientoContext } from "../AI/callSeguimientoContext.js";
+import { getEstadoId, resolverEstadoId } from "../Helpers/h_estados.js";
+import { INCLUDE_CLIENTE } from "../Helpers/includeCliente.js";
 
 export const listarClientes = async (req, res) => {
   try {
-    const { search, page = 1, limit = 20 } = req.query;
+    const { search, estado, rubro_id, pais_id, page = 1, limit = 20 } = req.query;
+
     const where = {};
-    if (search) where.nombre = { [Op.iLike]: `%${search.trim()}%` };
+    if (search) where.empresa = { [Op.iLike]: `%${search.trim()}%` };
+    if (estado) where.estado = estado;
+    if (rubro_id) where.rubro_id = rubro_id;
+    if (pais_id) where.pais_id = pais_id;
+    if (estado)   where.estado_id = await resolverEstadoId(estado);
+
 
     const offset = (Math.max(1, +page) - 1) * +limit;
 
     const { count, rows } = await Cliente.findAndCountAll({
       where,
-      include:  INCLUDE_CLIENTE,
-      order:    [["nombre", "ASC"]],
-      limit:    +limit,
+      include: INCLUDE_CLIENTE,
+      order: [["empresa", "ASC"]],
+      limit: +limit,
       offset,
       distinct: true,
     });
 
     return res.status(200).json({
-      ok:    true,
+      ok: true,
       total: count,
-      page:  +page,
+      page: +page,
       pages: Math.ceil(count / +limit),
-      data:  rows,
+      data: rows,
     });
   } catch (err) {
     console.error("[listarClientes]", err);
@@ -37,10 +50,23 @@ export const listarClientes = async (req, res) => {
   }
 };
 
-
+// ─────────────────────────────────────────────────────────────
 export const obtenerCliente = async (req, res) => {
   try {
-    const cliente = await Cliente.findByPk(req.params.id, { include: INCLUDE_CLIENTE });
+    const cliente = await Cliente.findByPk(req.params.id, {
+      include: [
+        ...INCLUDE_CLIENTE,
+        {
+          model: SeguimientoCliente,
+          as: "seguimientos",
+          include: [
+            { model: Consultor, as: "consultor", attributes: ["id", "nombre", "email"] },
+            { model: UsuarioCliente, as: "contacto_cliente", attributes: ["id", "nombre", "email","telefono","linkedin", "cargo"] },
+          ],
+          order: [["fecha", "DESC"]],
+        },
+      ],
+    });
 
     if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
 
@@ -51,34 +77,66 @@ export const obtenerCliente = async (req, res) => {
   }
 };
 
-
+// ─────────────────────────────────────────────────────────────
 export const crearCliente = async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const {
-      nombre, empresa, usuarios = [],
+      empresa,
+      pais_id, ciudad_id, direccion,
+      rubro_id, estado = "Lead",
+      referido_por,
       precio_hora_desarrollo, precio_hora_soporte,
-      precio_hora_cambio, porcentaje_gobierno, nota,
+      precio_hora_cambio, porcentaje_gobierno,
+      nota,
+      usuarios = [],
     } = req.body;
 
-    if (!nombre?.trim())  { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." }); }
-    if (!empresa?.trim()) { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'empresa' es obligatoria." }); }
+    if (!empresa?.trim()) {
+      await t.rollback();
+      return res.status(400).json({ ok: false, mensaje: "'empresa' es obligatoria." });
+    }
 
-    const existe = await Cliente.findOne({ where: { nombre: nombre.trim() } });
-    if (existe) { await t.rollback(); return res.status(409).json({ ok: false, mensaje: "Ya existe un cliente con ese nombre." }); }
+    const existe = await Cliente.findOne({ where: { empresa: empresa.trim() } });
+    if (existe) {
+      await t.rollback();
+      return res.status(409).json({ ok: false, mensaje: "Ya existe un cliente con ese nombre de empresa." });
+    }
 
-    const cliente = await Cliente.create(
-      {
-        nombre:                 nombre.trim(),
-        empresa:                empresa.trim(),
-        precio_hora_desarrollo: precio_hora_desarrollo ?? null,
-        precio_hora_soporte:    precio_hora_soporte    ?? null,
-        precio_hora_cambio:     precio_hora_cambio     ?? null,
-        porcentaje_gobierno:    porcentaje_gobierno    ?? null,
-        nota:                   nota || null,
-      },
-      { transaction: t }
-    );
+    // Validar FK opcionales
+    if (pais_id && !(await Pais.findByPk(pais_id))) {
+      await t.rollback();
+      return res.status(400).json({ ok: false, mensaje: "País no válido." });
+    }
+    if (ciudad_id) {
+      const ciudad = await Ciudad.findByPk(ciudad_id);
+      if (!ciudad) { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "Ciudad no válida." }); }
+      if (pais_id && ciudad.pais_id !== +pais_id) {
+        await t.rollback();
+        return res.status(400).json({ ok: false, mensaje: "La ciudad no pertenece al país indicado." });
+      }
+    }
+    if (rubro_id && !(await Rubro.findByPk(rubro_id))) {
+      await t.rollback();
+      return res.status(400).json({ ok: false, mensaje: "Rubro no válido." });
+    }
+
+     const estado_id = await resolverEstadoId(estado);
+
+    const cliente = await Cliente.create({
+      empresa: empresa.trim(),
+      pais_id: pais_id ?? null,
+      ciudad_id: ciudad_id ?? null,
+      direccion: direccion?.trim() || null,
+      rubro_id: rubro_id ?? null,
+      estado_id,                          
+      referido_por: referido_por?.trim() || null,
+      precio_hora_desarrollo: precio_hora_desarrollo ?? null,
+      precio_hora_soporte: precio_hora_soporte ?? null,
+      precio_hora_cambio: precio_hora_cambio ?? null,
+      porcentaje_gobierno: porcentaje_gobierno ?? null,
+      nota: nota || null,
+    }, { transaction: t });
 
     if (usuarios.length > 0) {
       const data = usuarios.map(u => ({ ...u, cliente_id: cliente.id }));
@@ -101,24 +159,48 @@ export const actualizarCliente = async (req, res) => {
     if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
 
     const {
-      nombre,empresa,
+      empresa,
+      pais_id, ciudad_id, direccion,
+      rubro_id, estado, estado_id: estadoIdBody,
+      referido_por,
       precio_hora_desarrollo, precio_hora_soporte,
-      precio_hora_cambio, porcentaje_gobierno, nota,
+      precio_hora_cambio, porcentaje_gobierno,
+      nota,
     } = req.body;
 
-     if (nombre && nombre.trim() !== cliente.nombre) {
-      const dup = await Cliente.findOne({ where: { nombre: nombre.trim() } });
-      if (dup) return res.status(409).json({ ok: false, mensaje: "Nombre de cliente ya en uso." });
+    if (empresa && empresa.trim() !== cliente.empresa) {
+      const dup = await Cliente.findOne({ where: { empresa: empresa.trim() } });
+      if (dup) return res.status(409).json({ ok: false, mensaje: "Nombre de empresa ya en uso." });
     }
 
+    const nuevoPaisId = pais_id !== undefined ? pais_id : cliente.pais_id;
+    const nuevaCiudadId = ciudad_id !== undefined ? ciudad_id : cliente.ciudad_id;
+    if (nuevaCiudadId && nuevoPaisId) {
+      const ciudad = await Ciudad.findByPk(nuevaCiudadId);
+      if (ciudad && ciudad.pais_id !== +nuevoPaisId) {
+        return res.status(400).json({ ok: false, mensaje: "La ciudad no pertenece al país indicado." });
+      }
+    }
+
+    const estado_id = estadoIdBody
+      ? estadoIdBody
+      : estado
+        ? await resolverEstadoId(estado)
+        : cliente.estado_id;
+
     await cliente.update({
-      nombre:                 nombre?.trim()        || cliente.nombre,
-      empresa:                empresa?.trim()       || cliente.empresa,
+      empresa: empresa?.trim() || cliente.empresa,
+      pais_id: pais_id !== undefined ? pais_id : cliente.pais_id,
+      ciudad_id: ciudad_id !== undefined ? ciudad_id : cliente.ciudad_id,
+      direccion: direccion !== undefined ? direccion?.trim() || null : cliente.direccion,
+      rubro_id: rubro_id !== undefined ? rubro_id : cliente.rubro_id,
+      estado_id,
+      referido_por: referido_por !== undefined ? referido_por?.trim() || null : cliente.referido_por,
       precio_hora_desarrollo: precio_hora_desarrollo ?? null,
-      precio_hora_soporte:    precio_hora_soporte    ?? null,
-      precio_hora_cambio:     precio_hora_cambio     ?? null,
-      porcentaje_gobierno:    porcentaje_gobierno    ?? null,
-      nota:                   nota                  ?? null,
+      precio_hora_soporte: precio_hora_soporte ?? null,
+      precio_hora_cambio: precio_hora_cambio ?? null,
+      porcentaje_gobierno: porcentaje_gobierno ?? null,
+      nota: nota ?? null,
     });
 
     const resultado = await Cliente.findByPk(cliente.id, { include: INCLUDE_CLIENTE });
@@ -134,11 +216,35 @@ export const eliminarCliente = async (req, res) => {
     const cliente = await Cliente.findByPk(req.params.id);
     if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
 
-    await cliente.destroy();
-    return res.status(200).json({ ok: true, mensaje: "Cliente eliminado." });
+    const estadoInactivo = await getEstadoId("Inactivo");
+    if (cliente.estado_id === estadoInactivo)
+      return res.status(400).json({ ok: false, mensaje: "El cliente ya está inactivo." });
+
+    await cliente.update({ estado_id: estadoInactivo });
+    return res.status(200).json({ ok: true, mensaje: "Cliente desactivado.", data: cliente });
   } catch (err) {
-    console.error("[eliminarCliente]", err);
-    return res.status(500).json({ ok: false, mensaje: "Error al eliminar cliente.", detalle: err.message });
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const restaurarCliente = async (req, res) => {
+  try {
+    const cliente = await Cliente.findByPk(req.params.id);
+    if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
+
+    const [estadoInactivo, estadoActivo] = await Promise.all([
+      getEstadoId("Inactivo"),
+      getEstadoId("Activo"),
+    ]);
+
+    if (cliente.estado_id !== estadoInactivo)
+      return res.status(400).json({ ok: false, mensaje: "El cliente no está inactivo." });
+
+    await cliente.update({ estado_id: estadoActivo });
+    const resultado = await Cliente.findByPk(cliente.id, { include: INCLUDE_CLIENTE });
+    return res.status(200).json({ ok: true, mensaje: "Cliente reactivado.", data: resultado });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
   }
 };
 
@@ -164,7 +270,7 @@ export const crearUsuario = async (req, res) => {
     const cliente = await Cliente.findByPk(req.params.clienteId);
     if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
 
-    const { nombre, email, telefono, cargo } = req.body;
+    const { nombre, email, telefono,linkedin, cargo } = req.body;
     if (!nombre?.trim()) return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." });
     if (!emailValido(email)) return res.status(400).json({ ok: false, mensaje: "Email inválido." });
 
@@ -173,6 +279,7 @@ export const crearUsuario = async (req, res) => {
       nombre: nombre.trim(),
       email,
       telefono,
+      linkedin,
       cargo,
     });
 
@@ -190,9 +297,10 @@ export const actualizarUsuario = async (req, res) => {
     });
     if (!usuario) return res.status(404).json({ ok: false, mensaje: "Usuario no encontrado." });
 
-    const { nombre, cargo, activo } = req.body;
+    const { nombre, cargo, activo, email,linkedin, telefono } = req.body;
+    if (email && !emailValido(email)) return res.status(400).json({ ok: false, mensaje: "Email inválido." });
 
-    await usuario.update({ nombre,cargo, activo });
+    await usuario.update({ nombre, cargo, activo, email, linkedin, telefono });
     return res.status(200).json({ ok: true, mensaje: "Usuario actualizado.", data: usuario });
   } catch (err) {
     console.error("[actualizarUsuario]", err);
@@ -212,5 +320,234 @@ export const eliminarUsuario = async (req, res) => {
   } catch (err) {
     console.error("[eliminarUsuario]", err);
     return res.status(500).json({ ok: false, mensaje: "Error al eliminar usuario.", detalle: err.message });
+  }
+};
+
+
+export const listarSeguimientos = async (req, res) => {
+  try {
+    const cliente = await Cliente.findByPk(req.params.clienteId);
+    if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
+
+    const { estado, medio, tipo, page = 1, limit = 20 } = req.query;
+    const where = { cliente_id: req.params.clienteId };
+    if (estado) where.estado = estado;
+    if (medio) where.medio = medio;
+    if (tipo) where.tipo = tipo;
+
+    const offset = (Math.max(1, +page) - 1) * +limit;
+
+    const { count, rows } = await SeguimientoCliente.findAndCountAll({
+      where,
+      include: [
+        { model: Consultor, as: "consultor", attributes: ["id", "nombre", "email"] },
+        { model: UsuarioCliente, as: "contacto_cliente", attributes: ["id", "nombre", "email", "telefono", "linkedin", "cargo"] },
+      ],
+      order: [["fecha", "ASC"]],
+      limit: +limit,
+      offset,
+      distinct: true,
+    });
+
+    return res.status(200).json({
+      ok: true,
+      total: count,
+      page: +page,
+      pages: Math.ceil(count / +limit),
+      data: rows,
+    });
+  } catch (err) {
+    console.error("[listarSeguimientos]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al listar seguimientos.", detalle: err.message });
+  }
+};
+// ── Helper: genera y guarda el contexto IA del seguimiento ────
+const generarContextoSeguimiento = async (clienteId, nuevoSeguimientoId) => {
+  try {
+    // 1. Cargar el cliente con sus includes
+    const cliente = await Cliente.findByPk(clienteId, {
+      include: [
+        { model: Pais, as: "pais", attributes: ["id", "nombre"] },
+        { model: Ciudad, as: "ciudad", attributes: ["id", "nombre"] },
+        { model: Rubro, as: "rubro", attributes: ["id", "nombre"] },
+      ],
+    });
+    if (!cliente) return;
+
+    // 2. Separar historial anterior del seguimiento nuevo
+    const todos = await SeguimientoCliente.findAll({
+      where: { cliente_id: clienteId },
+      include: [
+        { model: Consultor, as: "consultor", attributes: ["id", "nombre"] },
+        { model: UsuarioCliente, as: "contacto_cliente", attributes: ["id", "nombre"] },
+      ],
+      order: [["fecha", "ASC"]],
+    });
+
+    const nuevoSeg = todos.find(s => s.id === nuevoSeguimientoId);
+    const anteriores = todos.filter(s => s.id !== nuevoSeguimientoId);
+
+    if (!nuevoSeg) return;
+
+    const respuestaIA = await callSeguimientoContext("seguimiento_context", {
+      cliente,
+      seguimientos_anteriores: anteriores,
+      seguimiento_nuevo: nuevoSeg,
+    });
+
+    const contexto = typeof respuestaIA === "string" ? JSON.parse(respuestaIA) : respuestaIA;
+    await nuevoSeg.update({ contexto_seguimiento: contexto });
+  } catch (err) {
+    console.error("[generarContextoSeguimiento] Error al generar contexto IA:", err.message);
+  }
+};
+
+const ESTADOS_SEGUIMIENTO_VALIDOS = ["programado", "completado", "cancelado"];
+
+export const crearSeguimiento = async (req, res) => {
+  try {
+    const cliente = await Cliente.findByPk(req.params.clienteId);
+    if (!cliente) return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." });
+
+    const {
+      consultor_id, usuario_cliente_id,
+      fecha, fecha_proxima_accion,
+      medio, tipo, descripcion, resultado,
+    } = req.body;
+
+    // ← Sanitizar estado: ignorar cualquier valor que no pertenezca al ENUM
+    const estado = ESTADOS_SEGUIMIENTO_VALIDOS.includes(req.body.estado)
+      ? req.body.estado
+      : "programado";
+
+    if (!consultor_id) return res.status(400).json({ ok: false, mensaje: "'consultor_id' es obligatorio." });
+    if (!fecha) return res.status(400).json({ ok: false, mensaje: "'fecha' es obligatoria." });
+    if (!medio) return res.status(400).json({ ok: false, mensaje: "'medio' es obligatorio." });
+    if (!tipo) return res.status(400).json({ ok: false, mensaje: "'tipo' es obligatorio." });
+    if (!descripcion?.trim()) return res.status(400).json({ ok: false, mensaje: "'descripcion' es obligatoria." });
+
+    const consultor = await Consultor.findByPk(consultor_id);
+    if (!consultor) return res.status(400).json({ ok: false, mensaje: "Consultor no encontrado." });
+
+    if (usuario_cliente_id) {
+      const contacto = await UsuarioCliente.findOne({
+        where: { id: usuario_cliente_id, cliente_id: req.params.clienteId },
+      });
+      if (!contacto) return res.status(400).json({ ok: false, mensaje: "El contacto no pertenece a este cliente." });
+    }
+
+    const seguimiento = await SeguimientoCliente.create({
+      cliente_id: req.params.clienteId,
+      consultor_id,
+      usuario_cliente_id: usuario_cliente_id ?? null,
+      fecha,
+      fecha_proxima_accion: fecha_proxima_accion ?? null,
+      medio,
+      tipo,
+      descripcion: descripcion.trim(),
+      resultado: resultado?.trim() || null,
+      estado,                                        // ← ya validado
+      contexto_seguimiento: null,
+    });
+
+    const resultado_final = await SeguimientoCliente.findByPk(seguimiento.id, {
+      include: [
+        { model: Consultor, as: "consultor", attributes: ["id", "nombre", "email"] },
+        { model: UsuarioCliente, as: "contacto_cliente", attributes: ["id", "nombre", "email","telefono","linkedin", "cargo"] },
+      ],
+    });
+
+    res.status(201).json({ ok: true, mensaje: "Seguimiento registrado.", data: resultado_final });
+
+    generarContextoSeguimiento(req.params.clienteId, seguimiento.id);
+
+  } catch (err) {
+    console.error("[crearSeguimiento]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al crear seguimiento.", detalle: err.message });
+  }
+};
+
+export const actualizarSeguimiento = async (req, res) => {
+  try {
+    const seguimiento = await SeguimientoCliente.findOne({
+      where: { id: req.params.seguimientoId, cliente_id: req.params.clienteId },
+    });
+    if (!seguimiento) return res.status(404).json({ ok: false, mensaje: "Seguimiento no encontrado." });
+
+    const {
+      fecha, fecha_proxima_accion, medio, tipo,
+      descripcion, resultado, estado, usuario_cliente_id,
+    } = req.body;
+
+    await seguimiento.update({
+      fecha: fecha ?? seguimiento.fecha,
+      fecha_proxima_accion: fecha_proxima_accion !== undefined ? fecha_proxima_accion : seguimiento.fecha_proxima_accion,
+      medio: medio ?? seguimiento.medio,
+      tipo: tipo ?? seguimiento.tipo,
+      descripcion: descripcion?.trim() ?? seguimiento.descripcion,
+      resultado: resultado !== undefined ? resultado?.trim() || null : seguimiento.resultado,
+      estado: estado ?? seguimiento.estado,
+      usuario_cliente_id: usuario_cliente_id !== undefined ? usuario_cliente_id : seguimiento.usuario_cliente_id,
+    });
+
+    const camposRelevantes = ["descripcion", "resultado", "estado", "fecha", "medio", "tipo"];
+    const cambioRelevante = camposRelevantes.some(c => req.body[c] !== undefined);
+    if (cambioRelevante) {
+      generarContextoSeguimiento(req.params.clienteId, seguimiento.id);
+    }
+
+    return res.status(200).json({ ok: true, mensaje: "Seguimiento actualizado.", data: seguimiento });
+  } catch (err) {
+    console.error("[actualizarSeguimiento]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al actualizar seguimiento.", detalle: err.message });
+  }
+};
+
+export const eliminarSeguimiento = async (req, res) => {
+  try {
+    const seguimiento = await SeguimientoCliente.findOne({
+      where: { id: req.params.seguimientoId, cliente_id: req.params.clienteId },
+    });
+    if (!seguimiento) return res.status(404).json({ ok: false, mensaje: "Seguimiento no encontrado." });
+
+    await seguimiento.destroy();
+    return res.status(200).json({ ok: true, mensaje: "Seguimiento eliminado." });
+  } catch (err) {
+    console.error("[eliminarSeguimiento]", err);
+    return res.status(500).json({ ok: false, mensaje: "Error al eliminar seguimiento.", detalle: err.message });
+  }
+};
+
+// ══════════════════════════════════════════════════════════════
+// CATÁLOGOS — solo lectura
+// ══════════════════════════════════════════════════════════════
+
+export const listarPaises = async (_req, res) => {
+  try {
+    const paises = await Pais.findAll({ order: [["nombre", "ASC"]] });
+    return res.status(200).json({ ok: true, data: paises });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: "Error al listar países.", detalle: err.message });
+  }
+};
+
+export const listarCiudadesPorPais = async (req, res) => {
+  try {
+    const ciudades = await Ciudad.findAll({
+      where: { pais_id: req.params.paisId },
+      order: [["nombre", "ASC"]],
+    });
+    return res.status(200).json({ ok: true, data: ciudades });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: "Error al listar ciudades.", detalle: err.message });
+  }
+};
+
+export const listarRubros = async (_req, res) => {
+  try {
+    const rubros = await Rubro.findAll({ order: [["nombre", "ASC"]] });
+    return res.status(200).json({ ok: true, data: rubros });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: "Error al listar rubros.", detalle: err.message });
   }
 };

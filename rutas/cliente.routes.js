@@ -1,68 +1,53 @@
 import { Router } from "express";
-
-import verifyToken       from "../middlewares/verifyToken.js";
+import verifyToken from "../middlewares/verifyToken.js";
 
 import {
+  // Clientes
   listarClientes,
   obtenerCliente,
   crearCliente,
   actualizarCliente,
   eliminarCliente,
+  restaurarCliente,
+  // Usuarios del cliente
   listarUsuarios,
   crearUsuario,
   actualizarUsuario,
   eliminarUsuario,
+  // Seguimientos
+  listarSeguimientos,
+  crearSeguimiento,
+  actualizarSeguimiento,
+  eliminarSeguimiento,
+  // Catálogos
+  listarPaises,
+  listarCiudadesPorPais,
+  listarRubros,
 } from "../controladores/cliente.controller.js";
 
 const router = Router();
 
 router.use(verifyToken);
 
-router.get(
-  "/clientes",
-  listarClientes
-);
+router.get("/catalogos/paises",                listarPaises);
+router.get("/catalogos/paises/:paisId/ciudades", listarCiudadesPorPais);
+router.get("/catalogos/rubros",                listarRubros);
 
-router.get(
-  "/clientes/:id",
-  obtenerCliente
-);
+router.get(   "/clientes",          listarClientes);
+router.get(   "/clientes/:id",      obtenerCliente);
+router.post(  "/clientes",          crearCliente);
+router.put(   "/clientes/:id",      actualizarCliente);
+router.delete("/clientes/:id",      eliminarCliente);
+router.patch( "/clientes/:id/restaurar", restaurarCliente);
 
-router.post(
-  "/clientes",
-  crearCliente
-);
+router.get(   "/clientes/:clienteId/usuarios",              listarUsuarios);
+router.post(  "/clientes/:clienteId/usuarios",              crearUsuario);
+router.put(   "/clientes/:clienteId/usuarios/:usuarioId",   actualizarUsuario);
+router.delete("/clientes/:clienteId/usuarios/:usuarioId",   eliminarUsuario);
 
-router.put(
-  "/clientes/:id",
-  actualizarCliente
-);
-
-router.delete(
-  "/clientes/:id",
-  eliminarCliente
-);
-
-// ─── Usuarios del cliente ─────────────────────────────────────
-router.get(
-  "/clientes/:clienteId/usuarios",
-  listarUsuarios
-);
-
-router.post(
-  "/clientes/:clienteId/usuarios",
-  crearUsuario
-);
-
-router.put(
-  "/clientes/:clienteId/usuarios/:usuarioId",
-
-  actualizarUsuario
-);
-
-router.delete(
-  "/clientes/:clienteId/usuarios/:usuarioId",
-  eliminarUsuario
-);
+router.get(   "/clientes/:clienteId/seguimientos",                    listarSeguimientos);
+router.post(  "/clientes/:clienteId/seguimientos",                    crearSeguimiento);
+router.put(   "/clientes/:clienteId/seguimientos/:seguimientoId",     actualizarSeguimiento);
+router.delete("/clientes/:clienteId/seguimientos/:seguimientoId",     eliminarSeguimiento);
 
 export default router;

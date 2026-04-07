@@ -32,7 +32,11 @@ export const Consultor = sequelize.define(
     activo: {
       type: DataTypes.BOOLEAN,
       defaultValue: true
-    }
+    },
+    fecha_ingreso: {
+      type: DataTypes.DATEONLY,
+      allowNull: true,
+    },
   },
   {
     tableName: "consultores",

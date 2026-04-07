@@ -123,7 +123,7 @@ export const crearHerramienta = async (req, res) => {
     if (existe) return res.status(409).json({ ok: false, mensaje: "Ya existe una herramienta con ese nombre." });
 
     const herramienta = await HerramientaRpa.create({
-      nombre: nombre.trim(), descripcion, fabricante, version,
+      nombre: nombre.trim(), fabricante,
     });
     return res.status(201).json({ ok: true, mensaje: "Herramienta creada.", data: herramienta });
   } catch (err) {
@@ -137,14 +137,14 @@ export const actualizarHerramienta = async (req, res) => {
     const herramienta = await HerramientaRpa.findByPk(req.params.id);
     if (!herramienta) return res.status(404).json({ ok: false, mensaje: "Herramienta no encontrada." });
 
-    const { nombre, descripcion, fabricante, version, activo } = req.body;
+    const { nombre, fabricante, activo } = req.body;
 
     if (nombre && nombre.trim() !== herramienta.nombre) {
       const dup = await HerramientaRpa.findOne({ where: { nombre: nombre.trim() } });
       if (dup) return res.status(409).json({ ok: false, mensaje: "Nombre ya en uso." });
     }
 
-    await herramienta.update({ nombre, descripcion, fabricante, version, activo });
+    await herramienta.update({ nombre, fabricante, activo });
     return res.status(200).json({ ok: true, mensaje: "Herramienta actualizada.", data: herramienta });
   } catch (err) {
     console.error("[actualizarHerramienta]", err);
