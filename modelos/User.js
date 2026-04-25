@@ -43,6 +43,11 @@ const User = sequelize.define("User", {
   token_verificacion: {
     type: DataTypes.STRING,
     allowNull: true
+  },
+  google_token : {
+    type: DataTypes.TEXT("long"),
+    allowNull: true,
+    defaultValue: null
   }
 
 }, {

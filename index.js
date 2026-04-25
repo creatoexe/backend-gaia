@@ -18,7 +18,7 @@ import estadoProyectoRoutes from "./rutas/estadoProyecto.routes.js";
 import reporteRoutes        from "./rutas/reporte.routes.js";
 import chatRoutes           from "./rutas/chat.routes.js";
 import aiApp                from "./rutas/ai.routes.js";
-
+import calendarRoutes from './rutas/calendario.routes.js';
 import { cargarCatalogos }  from "./seeders/catalogosSeed.js";
 
 const app  = express();
@@ -39,6 +39,8 @@ api.use(reporteRoutes);
 api.use(chatRoutes);
 api.use(aiApp);
 api.use(estadosRoutes);
+app.use(calendarRoutes);
+
 
 app.use("/api", api);
 
@@ -50,18 +52,18 @@ app.use((err, req, res, _next) => {
 const main = async () => {
   try {
     await sequelize.authenticate();
-    console.log("✅ Base de datos conectada.");
+    console.log("Base de datos conectada.");
 
-    await sequelize.sync({ alter: true });
-    console.log("✅ Modelos sincronizados.");
+    await sequelize.sync({ alter: !true });
+    console.log("Modelos sincronizados.");
 
     await cargarCatalogos();
 
     app.listen(_PORT, "0.0.0.0", () => {
-      console.log(`🚀 Servidor corriendo en el puerto => ${_PORT}`);
+      console.log(`Servidor corriendo en el puerto => ${_PORT}`);
     });
   } catch (error) {
-    console.error("❌ Error al iniciar:", error);
+    console.error("Error al iniciar:", error);
     process.exit(1);
   }
 };

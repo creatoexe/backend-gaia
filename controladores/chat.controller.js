@@ -6,16 +6,13 @@ import { buildAIRequestPayload } from "../AI/buildAIRequestPayload.js";
 import { AI_PROVIDERS } from "../AI/providers.js";
 import { processFiles } from "../utils/fileProcessor.js";
 
-const TOKENS_PARA_RESUMIR = 300;
-const MENSAJES_DE_CONTEXTO = 6;
+const TOKENS_PARA_RESUMIR  = 2000;   
+const MENSAJES_DE_CONTEXTO = 10;    
 
-// ─── Helper: obtener user desde el token ────────────────────
 const getUserDesdeToken = async (req) => {
-  const user = await User.findOne({ where: { email: req.user.email } });
-  return user;
+  return User.findOne({ where: { email: req.user.email } });
 };
 
-// ─── Helper: llamar a la IA ─────────────────────────────────
 const llamarIA = async (mod, data_to_analyze) => {
   const { payload, provider } = buildAIRequestPayload(mod, data_to_analyze, []);
   const cfg = AI_PROVIDERS[provider];
@@ -24,6 +21,7 @@ const llamarIA = async (mod, data_to_analyze) => {
   return parseAIResponse(raw);
 };
 
+// ────────────────────────────────────────────────────────────
 export const crearChat = async (req, res) => {
   try {
     const { titulo } = req.body;
@@ -34,18 +32,19 @@ export const crearChat = async (req, res) => {
 
     const chat = await Chat.create({
       user_id: user.id,
-      titulo: titulo?.trim() || "Nueva conversación",
+      titulo:  titulo?.trim() || "Nueva conversación",
     });
 
     await ContextoChat.create({ chat_id: chat.id });
 
     return res.status(201).json({ ok: true, mensaje: "Chat creado.", data: chat });
   } catch (err) {
-    console.error("[crearChat] ERROR:", err.message);
+    console.error("[crearChat]", err.message);
     return res.status(500).json({ ok: false, mensaje: "Error al crear chat.", detalle: err.message });
   }
 };
 
+// ────────────────────────────────────────────────────────────
 export const listarChats = async (req, res) => {
   try {
     const user = await getUserDesdeToken(req);
@@ -64,6 +63,7 @@ export const listarChats = async (req, res) => {
   }
 };
 
+// ────────────────────────────────────────────────────────────
 export const obtenerMensajes = async (req, res) => {
   try {
     const chat = await Chat.findByPk(req.params.chatId);
@@ -84,6 +84,7 @@ export const obtenerMensajes = async (req, res) => {
   }
 };
 
+// ────────────────────────────────────────────────────────────
 export const eliminarChat = async (req, res) => {
   try {
     const chat = await Chat.findByPk(req.params.chatId);
@@ -98,48 +99,60 @@ export const eliminarChat = async (req, res) => {
   }
 };
 
+// ────────────────────────────────────────────────────────────
 export const enviarMensaje = async (req, res) => {
   try {
     const { chatId } = req.params;
-    const { pregunta, provider = "claude", model = null } = req.body;
+    const {
+      pregunta,
+      provider     = "claude",
+      model        = null,
+      currentRoute = "/",
+    } = req.body;
 
     if (!pregunta?.trim())
       return res.status(400).json({ ok: false, mensaje: "'pregunta' es obligatoria." });
 
-    // ── 1. Lecturas sin transacción ──────────────────────────
-    const chat = await Chat.findByPk(chatId);
+    const [chat, contexto, mensajesRecientes, totalMensajes] = await Promise.all([
+      Chat.findByPk(chatId),
+      ContextoChat.findOne({ where: { chat_id: chatId } }),
+      Mensaje.findAll({
+        where: { chat_id: chatId, rol: ["user", "assistant"] },
+        order: [["indice_orden", "DESC"]],
+        limit: MENSAJES_DE_CONTEXTO,
+      }),
+      Mensaje.count({ where: { chat_id: chatId } }),
+    ]);
+
     if (!chat || !chat.activo)
       return res.status(404).json({ ok: false, mensaje: "Chat no encontrado o inactivo." });
 
-    const contexto = await ContextoChat.findOne({ where: { chat_id: chatId } });
-
-    const mensajesRecientes = await Mensaje.findAll({
-      where: { chat_id: chatId, rol: ["user", "assistant"] },
-      order: [["indice_orden", "DESC"]],
-      limit: MENSAJES_DE_CONTEXTO,
-    });
-    const historial_reciente = mensajesRecientes.reverse().map(m => ({
-      rol: m.rol,
+    const historial_reciente = mensajesRecientes.reverse().map((m) => ({
+      rol:       m.rol,
       contenido: m.contenido,
     }));
 
-    const totalMensajes = await Mensaje.count({ where: { chat_id: chatId } });
+    const intencion_pendiente = contexto?.intencion_pendiente || null;
 
-    // ── 2. Guardar mensaje del usuario sin transacción ───────
+    // ── 2. Guardar mensaje del usuario ───────────────────────
     await Mensaje.create({
-      chat_id: chatId,
-      rol: "user",
-      contenido: pregunta.trim(),
+      chat_id:      chatId,
+      rol:          "user",
+      contenido:    pregunta.trim(),
       indice_orden: totalMensajes,
-      tokens: null,
+      tokens:       null,
     });
 
-    // ── 3. Procesar archivos y llamar a la IA (FUERA de tx) ──
+    // ── 3. Procesar archivos ─────────────────────────────────
     const archivosTexto = await processFiles(req.files ?? []);
 
+    // ── IA #1 · db_query ─────────────────────────────────────
+    // Recibe historial + intención_pendiente para que, si el mensaje actual
+    // son solo datos (nombre, email, etc.), infiera la acción del turno previo.
     const queryResult = await llamarIA("db_query", {
       pregunta,
       historial_reciente,
+      intencion_pendiente,
       resumen_contexto:  contexto?.resumen || null,
       archivos_contexto: archivosTexto,
       provider,
@@ -147,17 +160,21 @@ export const enviarMensaje = async (req, res) => {
     });
 
     if (!queryResult.isValid)
-      return res.status(422).json({ ok: false, mensaje: "La IA no pudo procesar la solicitud.", detalle: queryResult.error });
+      return res.status(422).json({
+        ok:      false,
+        mensaje: "La IA no pudo procesar la solicitud.",
+        detalle: queryResult.error,
+      });
 
     const { queryValida, razon, query } = queryResult.parsed;
 
-    let resultados    = [];
-    let total_filas   = 0;
+    let resultados     = [];
+    let total_filas    = 0;
     let errorEjecucion = null;
 
     if (queryValida && query) {
       try {
-        const rows = await sequelize.query(query, { type: sequelize.QueryTypes.SELECT });
+        const rows  = await sequelize.query(query, { type: sequelize.QueryTypes.SELECT });
         resultados  = rows;
         total_filas = rows.length;
       } catch (sqlErr) {
@@ -166,75 +183,80 @@ export const enviarMensaje = async (req, res) => {
       }
     }
 
+    // ── IA #2 · db_answer ────────────────────────────────────
+    // Recibe historial + intención_pendiente para mantener coherencia.
+    // Devuelve "intencion_pendiente" (nueva/actualizada o null si cerró)
+    // y "resumen" solo cuando debeResumir=true.
+    const tokensAcumulados = (contexto?.tokens_acumulados || 0) + pregunta.length;
+    const debeResumir      = tokensAcumulados > TOKENS_PARA_RESUMIR;
+
     const answerResult = await llamarIA("db_answer", {
       pregunta_original: pregunta,
+      current_route:     currentRoute,
       razon_query:       razon,
       query_valida:      queryValida && !errorEjecucion,
       resultados:        resultados.slice(0, 50),
       total_filas,
       archivos_contexto: archivosTexto,
+      historial_reciente,
+      intencion_pendiente,
+      generar_resumen:   debeResumir,
+      resumen_anterior:  contexto?.resumen || null,
       provider,
       model,
     });
 
     if (!answerResult.isValid)
-      return res.status(422).json({ ok: false, mensaje: "Error al formatear la respuesta.", detalle: answerResult.error });
+      return res.status(422).json({
+        ok:      false,
+        mensaje: "Error al formatear la respuesta.",
+        detalle: answerResult.error,
+      });
 
-    const { respuesta, tiene_datos, sugerencias } = answerResult.parsed;
+    const {
+      respuesta,
+      tiene_datos,
+      sugerencias,
+      actions                  = [],
+      intencion_pendiente:       nuevaIntencion = null,
+      resumen:                   resumenNuevo  = null,
+    } = answerResult.parsed;
 
-    // ── 4. Resumen si es necesario (FUERA de tx) ─────────────
-    const nuevoAcumulado = (contexto?.tokens_acumulados || 0) + pregunta.length + respuesta.length;
-    let resumenGenerado  = contexto?.resumen || null;
-    let debeResumir      = nuevoAcumulado > TOKENS_PARA_RESUMIR;
+    console.log("[db_answer] intencion_pendiente:", nuevaIntencion);
+    if (resumenNuevo) console.log("[contexto] resumen:", resumenNuevo.slice(0, 100));
 
-    if (debeResumir) {
-      const historialCompleto = [
-        ...historial_reciente,
-        { rol: "user",      contenido: pregunta  },
-        { rol: "assistant", contenido: respuesta },
-      ].map(m => `[${m.rol === "user" ? "Usuario" : "Asistente"}]: ${m.contenido}`)
-        .join("\n");
+    const resumenFinal = resumenNuevo || contexto?.resumen || null;
 
-      try {
-        const resumenResult = await llamarIA("db_summary", {
-          historial:        historialCompleto,
-          resumen_anterior: contexto?.resumen || null,
-          provider:         "claude",
-        });
-        if (resumenResult.isValid) resumenGenerado = resumenResult.parsed.resumen;
-      } catch {
-        resumenGenerado = historial_reciente
-          .filter(m => m.rol === "user")
-          .map(m => `- ${m.contenido.slice(0, 120)}`)
-          .join("\n");
-      }
-      console.log("[contexto] resumen generado:", resumenGenerado?.slice(0, 100));
-    }
-
-    // ── 5. Escrituras finales en transacción corta ───────────
+    // ── 4. Escrituras en transacción corta ───────────────────
     const t = await sequelize.transaction();
     try {
       const totalTras = totalMensajes + 1;
 
-      await Mensaje.create({
-        chat_id:      chatId,
-        rol:          "assistant",
-        contenido:    respuesta,
-        indice_orden: totalTras,
-        tokens:       null,
-      }, { transaction: t });
+      await Mensaje.create(
+        {
+          chat_id:      chatId,
+          rol:          "assistant",
+          contenido:    respuesta,
+          indice_orden: totalTras,
+          tokens:       null,
+        },
+        { transaction: t }
+      );
+
+      // Un solo update del contexto con todos los campos necesarios
+      const contextoUpdate = {
+        intencion_pendiente: nuevaIntencion,   // null limpia la intención si se completó
+      };
 
       if (debeResumir) {
-        await contexto.update({
-          resumen:             resumenGenerado,
-          mensajes_resumidos:  totalTras + 1,
-          tokens_acumulados:   0,
-        }, { transaction: t });
+        contextoUpdate.resumen            = resumenFinal;
+        contextoUpdate.mensajes_resumidos = totalTras + 1;
+        contextoUpdate.tokens_acumulados  = 0;
       } else {
-        await contexto.update({
-          tokens_acumulados: nuevoAcumulado,
-        }, { transaction: t });
+        contextoUpdate.tokens_acumulados = tokensAcumulados + respuesta.length;
       }
+
+      await contexto.update(contextoUpdate, { transaction: t });
 
       if (totalMensajes === 0) {
         await chat.update(
@@ -249,16 +271,18 @@ export const enviarMensaje = async (req, res) => {
       throw writeErr;
     }
 
-    // ── 6. Respuesta ─────────────────────────────────────────
+    // ── 5. Respuesta final ───────────────────────────────────
     return res.status(200).json({
       ok: true,
       respuesta,
       tiene_datos,
       sugerencias,
+      actions,
       contexto: {
-        resumen:             resumenGenerado,
+        resumen:             resumenFinal,
+        intencion_pendiente: nuevaIntencion,
         mensajes_resumidos:  contexto?.mensajes_resumidos ?? 0,
-        tokens_acumulados:   debeResumir ? 0 : nuevoAcumulado,
+        tokens_acumulados:   debeResumir ? 0 : tokensAcumulados + respuesta.length,
       },
       debug: {
         query_generada: query || null,
@@ -266,9 +290,12 @@ export const enviarMensaje = async (req, res) => {
         error_sql:      errorEjecucion,
       },
     });
-
   } catch (err) {
     console.error("[enviarMensaje]", err.message);
-    return res.status(500).json({ ok: false, mensaje: "Error en el flujo de chat.", detalle: err.message });
+    return res.status(500).json({
+      ok:      false,
+      mensaje: "Error en el flujo de chat.",
+      detalle: err.message,
+    });
   }
 };

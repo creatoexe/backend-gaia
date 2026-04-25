@@ -12,8 +12,7 @@ import {
 
 
 export const INCLUDE_PROYECTO = [
-  { model: Cliente, as: "cliente", attributes: ["id", "nombre", "empresa","precio_hora_desarrollo" , "precio_hora_soporte" , "precio_hora_cambio" , "porcentaje_gobierno"] },
-  { model: Estados, as: "estadoObj", attributes: ["id", "nombre"] },
+  { model: Cliente, as: "cliente", attributes: ["id", "empresa","precio_hora_desarrollo" , "precio_hora_soporte" , "precio_hora_cambio" , "porcentaje_gobierno"] },
   { model: Area,    as: "areas",   attributes: ["id", "nombre"], through: { attributes: [] } },
   {
     model:   UsuarioCliente,
@@ -29,7 +28,9 @@ export const INCLUDE_PROYECTO = [
   {
     model:   EstadoProyecto,
     as:      "historial_estados",
-    include: [{ model: Consultor, as: "consultor", attributes: ["id", "nombre"] }],
+    include: [{ model: Consultor, as: "consultor", attributes: ["id", "nombre"] },
+                { model: Estados, as: "estado", attributes: ["id", "nombre"] }
+  ],
     order:   [["fecha", "ASC"]],
   },
 ];

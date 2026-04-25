@@ -16,7 +16,10 @@ export const MAIL_PORT = process.env.MAIL_PORT;
 export const MAIL_USER = process.env.MAIL_USER;
 export const MAIL_PASS = process.env.MAIL_PASS;
 export const MAIL_FROM = process.env.MAIL_FROM;
-export const FRONTEND_URL = process.env.FRONTEND_URL;
 
 export const API_KEY_DEEPSEEK = process.env.API_KEY_DEEPSEEK;
 export const API_KEY_CLAUDE = process.env.API_KEY_CLAUDE;
+export const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+export const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
+export const GOOGLE_REDIRECT_URI = process.env.GOOGLE_REDIRECT_URI;
+export const FRONTEND_URL = process.env.FRONTEND_URL;

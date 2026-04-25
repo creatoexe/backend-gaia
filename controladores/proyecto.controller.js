@@ -52,16 +52,13 @@ export const obtenerProyecto = async (req, res) => {
 
 export const crearProyecto = async (req, res) => {
   const t = await sequelize.transaction();
+  let proyectoId = null; 
+
   try {
-    const { cliente_id, nombre, descripcion, horas_estimadas, areas = [] } = req.body;
+    const { cliente_id, nombre, descripcion, areas = [] } = req.body;
 
     if (!cliente_id) { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'cliente_id' es obligatorio." }); }
     if (!nombre?.trim()) { await t.rollback(); return res.status(400).json({ ok: false, mensaje: "'nombre' es obligatorio." }); }
-
-    if (horas_estimadas !== undefined && horas_estimadas !== null) {
-      if (!Number.isInteger(Number(horas_estimadas)) || Number(horas_estimadas) < 0)
-        return res.status(400).json({ ok: false, mensaje: "'horas_estimadas' debe ser un entero positivo." });
-    }
 
     const cliente = await Cliente.findByPk(cliente_id);
     if (!cliente) { await t.rollback(); return res.status(404).json({ ok: false, mensaje: "Cliente no encontrado." }); }
@@ -73,21 +70,23 @@ export const crearProyecto = async (req, res) => {
       porcentaje_gobierno: cliente.porcentaje_gobierno ?? null,
     };
 
-const proyecto = await Proyecto.create({
-  cliente_id,
-  nombre: nombre.trim(),
-  descripcion,
-  horas_estimadas: horas_estimadas || null,
-  estado_id: await getEstadoId("Lead"),   
-  ...tarifasSnapshot,
-}, { transaction: t });
+    const estadoLeadId = await getEstadoId("Lead");
+
+    const proyecto = await Proyecto.create({
+      cliente_id,
+      nombre: nombre.trim(),
+      descripcion,
+      estado_id: estadoLeadId,
+      ...tarifasSnapshot,
+    }, { transaction: t });
 
     await EstadoProyecto.create({
       proyecto_id: proyecto.id,
-      estado_id: await getEstadoId("Lead"),
+      estado_id: estadoLeadId,
       observacion: "",
       fecha: new Date(),
     }, { transaction: t });
+
     if (areas.length > 0) {
       await ProyectoArea.bulkCreate(
         areas.map((area_id) => ({ proyecto_id: proyecto.id, area_id })),
@@ -95,29 +94,33 @@ const proyecto = await Proyecto.create({
       );
     }
 
+    proyectoId = proyecto.id; 
     await t.commit();
-    const resultado = await Proyecto.findByPk(proyecto.id, { include: INCLUDE_PROYECTO });
-    return res.status(201).json({ ok: true, mensaje: "Proyecto creado.", data: resultado });
+
   } catch (err) {
-    await t.rollback();
+    await t.rollback(); 
     console.error("[crearProyecto]", err);
     return res.status(500).json({ ok: false, mensaje: "Error al crear proyecto.", detalle: err.message });
   }
-};
 
+  try {
+    const resultado = await Proyecto.findByPk(proyectoId, { include: INCLUDE_PROYECTO });
+    return res.status(201).json({ ok: true, mensaje: "Proyecto creado.", data: resultado });
+  } catch (err) {
+    console.error("[crearProyecto - lectura final]", err);
+    return res.status(201).json({ ok: true, mensaje: "Proyecto creado.", data: { id: proyectoId } });
+  }
+};
 export const actualizarProyecto = async (req, res) => {
   try {
     const proyecto = await Proyecto.findByPk(req.params.id);
     if (!proyecto) return res.status(404).json({ ok: false, mensaje: "Proyecto no encontrado." });
 
-    const { nombre, descripcion, activo, horas_estimadas } = req.body;
-    // Las tarifas NO se actualizan aquí: son un snapshot del momento de creación.
-    // Si se necesita re-sincronizar tarifas con el cliente, crear un endpoint dedicado.
+    const { nombre, descripcion, activo } = req.body;
     await proyecto.update({
       nombre,
       descripcion,
       activo,
-      horas_estimadas: horas_estimadas ?? proyecto.horas_estimadas,
     });
 
     const resultado = await Proyecto.findByPk(proyecto.id, { include: INCLUDE_PROYECTO });
@@ -262,11 +265,7 @@ export const cambiarEstadoHerramienta = async (req, res) => {
     });
     if (!asignacion) return res.status(404).json({ ok: false, mensaje: "Asignación no encontrada." });
 
-    const ESTADOS_VALIDOS = ["Activa", "Suspendida", "Expirada", "Revocada"];
     const { estado, motivo_cambio } = req.body;
-    if (!ESTADOS_VALIDOS.includes(estado))
-      return res.status(400).json({ ok: false, mensaje: `Estado inválido. Válidos: ${ESTADOS_VALIDOS.join(", ")}.` });
-
     await asignacion.update({ estado, motivo_cambio });
     return res.status(200).json({ ok: true, mensaje: "Estado actualizado.", data: asignacion });
   } catch (err) {

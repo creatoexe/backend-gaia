@@ -1,8 +1,6 @@
 import { DataTypes } from "sequelize";
 import { sequelize } from "../config/database.js";
 
-const TARIFA_HORA = 10;
-
 export const Proyecto = sequelize.define("Proyecto", {
   id: {
     type: DataTypes.UUID,
@@ -23,16 +21,6 @@ export const Proyecto = sequelize.define("Proyecto", {
   descripcion: {
     type: DataTypes.TEXT,
     allowNull: true,
-  },
-  horas_estimadas: {
-    type: DataTypes.INTEGER,
-    allowNull: true,
-    defaultValue: null,
-  },
-  costo_estimado: {
-    type: DataTypes.DECIMAL(12, 2),
-    allowNull: true,
-    defaultValue: null,
   },
   estado_id: {
   type: DataTypes.UUID,
@@ -62,20 +50,4 @@ export const Proyecto = sequelize.define("Proyecto", {
 }, {
   tableName: "proyectos",
   timestamps: true,
-  hooks: {
-    beforeSave(proyecto) {
-      // ── Costo estimado ───────────────────────────────────
-      const tarifa = proyecto.precio_hora_desarrollo != null
-        ? parseFloat(proyecto.precio_hora_desarrollo)
-        : TARIFA_HORA;
-
-      if (proyecto.horas_estimadas != null) {
-        proyecto.costo_estimado = parseFloat((proyecto.horas_estimadas * tarifa).toFixed(2));
-      } else {
-        proyecto.costo_estimado = null;
-      }
-
-      proyecto.activo = !["Cerrado", "Rechazado"].includes(proyecto.estado_actual);
-    },
-  },
 });

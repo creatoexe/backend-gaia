@@ -1,4 +1,4 @@
-import { ESTATUS_VALIDOS, INCLUDE_PROCESO, TIPOS_INTERACCION, TIPOS_VALIDOS } from "../Helpers/h_proceso.js";
+import { INCLUDE_PROCESO, TIPOS_INTERACCION } from "../Helpers/h_proceso.js";
 import {
   Proceso,
   Proyecto,
@@ -11,8 +11,13 @@ import {
   EtapaAprobacion,
   EtapaEjecucion,
   Interaccion,
+  InteraccionEstimacion,
+  InteraccionLevantamiento,
+  Estados,
 } from "../modelos/relations.js";
+import { getEstadoId, resolverEstadoId } from "../Helpers/h_estados.js";
 
+const TIPOS_CLASIFICACION = ["Proyecto Nuevo", "Solicitud de Cambio"];
 
 export const listarProcesos = async (req, res) => {
   try {
@@ -22,7 +27,7 @@ export const listarProcesos = async (req, res) => {
     const where = {};
     if (proyectoIdParam) where.proyecto_id = proyectoIdParam;
     if (estatus)         where.estatus      = estatus;
-    if (tipo)            where.tipo_proceso  = tipo;
+    if (tipo)            where.tipo         = tipo;
 
     const offset = (Math.max(1, +page) - 1) * +limit;
 
@@ -56,45 +61,43 @@ export const obtenerProceso = async (req, res) => {
   }
 };
 
-const TIPOS_CLASIFICACION = ["Proyecto Nuevo", "Solicitud de Cambio"];
-
 export const crearProceso = async (req, res) => {
   try {
     const { proyectoId } = req.params;
     const {
-      nombre_proceso, tipo, tipo_proceso, estatus = "Lead",
-      prioridad, probabilidad_aprobacion,
-      plazo_inicio, herramienta_rpa_id, accion_responsable,
+      nombre_proceso,
+      tipo,
+      estatus = "Creación",
+      prioridad,
+      herramientas_ids = [],
     } = req.body;
 
     if (!nombre_proceso?.trim())
       return res.status(400).json({ ok: false, mensaje: "'nombre_proceso' es obligatorio." });
-    if (!TIPOS_VALIDOS.includes(tipo_proceso))
-      return res.status(400).json({ ok: false, mensaje: `'tipo_proceso' inválido. Válidos: ${TIPOS_VALIDOS.join(", ")}.` });
     if (tipo && !TIPOS_CLASIFICACION.includes(tipo))
       return res.status(400).json({ ok: false, mensaje: `'tipo' inválido. Válidos: ${TIPOS_CLASIFICACION.join(", ")}.` });
 
     const proyecto = await Proyecto.findByPk(proyectoId);
     if (!proyecto) return res.status(404).json({ ok: false, mensaje: "Proyecto no encontrado." });
 
-    if (herramienta_rpa_id) {
-      const herramienta = await HerramientaRpa.findByPk(herramienta_rpa_id);
-      if (!herramienta) return res.status(404).json({ ok: false, mensaje: "Herramienta no encontrada." });
+    if (herramientas_ids.length > 0) {
+      const encontradas = await HerramientaRpa.findAll({ where: { id: herramientas_ids } });
+      if (encontradas.length !== herramientas_ids.length)
+        return res.status(404).json({ ok: false, mensaje: "Una o más herramientas no encontradas." });
     }
 
     const proceso = await Proceso.create({
-  proyecto_id: proyectoId,
-  nombre_proceso: nombre_proceso.trim(),
-  tipo: tipo || null,
-  tipo_proceso,
-  estado_id: await resolverEstadoId(estatus ?? "Lead"),  
-  prioridad,
-  probabilidad_aprobacion,
-  plazo_inicio,
-  herramienta_rpa_id,
-  accion_responsable,
-  fecha_lead: new Date(),
-});
+      proyecto_id:    proyectoId,
+      nombre_proceso: nombre_proceso.trim(),
+      tipo:           tipo || null,
+      estado_id:      await resolverEstadoId(estatus),
+      prioridad:      prioridad || null,
+      fecha_creacion: new Date(),
+    });
+
+    if (herramientas_ids.length > 0) {
+      await proceso.setHerramientas(herramientas_ids);
+    }
 
     const resultado = await Proceso.findByPk(proceso.id, { include: INCLUDE_PROCESO });
     return res.status(201).json({ ok: true, mensaje: "Proceso creado.", data: resultado });
@@ -109,22 +112,21 @@ export const actualizarProceso = async (req, res) => {
     const proceso = await Proceso.findByPk(req.params.id);
     if (!proceso) return res.status(404).json({ ok: false, mensaje: "Proceso no encontrado." });
 
-    const {
-      nombre_proceso, tipo, tipo_proceso, prioridad,
-      probabilidad_aprobacion, plazo_inicio,
-      herramienta_rpa_id, accion_responsable,
-    } = req.body;
+    const { nombre_proceso, tipo, prioridad, herramientas_ids } = req.body;
 
-    if (tipo_proceso && !TIPOS_VALIDOS.includes(tipo_proceso))
-      return res.status(400).json({ ok: false, mensaje: `'tipo_proceso' inválido.` });
     if (tipo && !TIPOS_CLASIFICACION.includes(tipo))
       return res.status(400).json({ ok: false, mensaje: `'tipo' inválido.` });
 
-    await proceso.update({
-      nombre_proceso, tipo, tipo_proceso, prioridad,
-      probabilidad_aprobacion, plazo_inicio,
-      herramienta_rpa_id, accion_responsable,
-    });
+    await proceso.update({ nombre_proceso, tipo, prioridad });
+
+    if (Array.isArray(herramientas_ids)) {
+      if (herramientas_ids.length > 0) {
+        const encontradas = await HerramientaRpa.findAll({ where: { id: herramientas_ids } });
+        if (encontradas.length !== herramientas_ids.length)
+          return res.status(404).json({ ok: false, mensaje: "Una o más herramientas no encontradas." });
+      }
+      await proceso.setHerramientas(herramientas_ids);
+    }
 
     const resultado = await Proceso.findByPk(proceso.id, { include: INCLUDE_PROCESO });
     return res.status(200).json({ ok: true, mensaje: "Proceso actualizado.", data: resultado });
@@ -145,11 +147,7 @@ export const cambiarEstatus = async (req, res) => {
     const estado_id = await resolverEstadoId(estatus).catch(() => null);
     if (!estado_id) return res.status(400).json({ ok: false, mensaje: `Estatus '${estatus}' no encontrado.` });
 
-    const fechas = {};
-    if (estatus === "Contactado" && !proceso.fecha_contactado)
-      fechas.fecha_contactado = new Date();
-
-    await proceso.update({ estado_id, ...fechas });
+    await proceso.update({ estado_id });
     return res.status(200).json({ ok: true, mensaje: `Estatus actualizado a '${estatus}'.`, data: proceso });
   } catch (err) {
     return res.status(500).json({ ok: false, mensaje: err.message });
@@ -169,40 +167,24 @@ export const eliminarProceso = async (req, res) => {
   }
 };
 
-// ─────────────────────────────────────────────────────────
-// HELPER: valida que todos los IDs existan en Consultor
-// ─────────────────────────────────────────────────────────
 const validarConsultores = async (ids) => {
   if (!ids || !Array.isArray(ids) || ids.length === 0)
     return { ok: false, mensaje: "'consultores_ids' debe ser un array no vacío." };
 
   const encontrados = await Consultor.findAll({ where: { id: ids } });
   if (encontrados.length !== ids.length) {
-    const encontradosIds = encontrados.map(c => c.id);
-    const faltantes = ids.filter(id => !encontradosIds.includes(id));
+    const faltantes = ids.filter(id => !encontrados.map(c => c.id).includes(id));
     return { ok: false, mensaje: `Consultores no encontrados: ${faltantes.join(", ")}.` };
   }
   return { ok: true };
 };
 
-// ─────────────────────────────────────────────────────────
-// HELPER GENÉRICO: upsert etapa + asignar consultores (N:M)
-// ─────────────────────────────────────────────────────────
-const upsertEtapa = async ({
-  Modelo,
-  procesoId,
-  datos,
-  consultores_ids,
-  aliasSet,       // nombre del método set que genera Sequelize, ej: "setConsultores"
-  res,
-  nombreEtapa,
-}) => {
+const upsertEtapa = async ({ Modelo, procesoId, datos, consultores_ids, aliasSet, res, nombreEtapa }) => {
   try {
     const proceso = await Proceso.findByPk(procesoId);
     if (!proceso)
       return res.status(404).json({ ok: false, mensaje: "Proceso no encontrado." });
 
-    // Validar consultores si vienen en el body
     if (consultores_ids !== undefined) {
       const validacion = await validarConsultores(consultores_ids);
       if (!validacion.ok)
@@ -216,20 +198,18 @@ const upsertEtapa = async ({
 
     if (!creada) await etapa.update(datos);
 
-    // Sincroniza consultores solo si se envió el array (permite actualizaciones parciales)
     if (consultores_ids !== undefined) {
-      await etapa[aliasSet](consultores_ids); // reemplaza la lista completa
+      await etapa[aliasSet](consultores_ids);
     }
 
-    // Recargar con consultores incluidos
     await etapa.reload({
       include: [{ model: Consultor, as: "consultores", attributes: ["id", "nombre"] }],
     });
 
     return res.status(creada ? 201 : 200).json({
-      ok:      true,
+      ok: true,
       mensaje: `${nombreEtapa} ${creada ? "registrada" : "actualizada"}.`,
-      data:    etapa,
+      data: etapa,
     });
   } catch (err) {
     console.error(`[upsert${nombreEtapa}]`, err);
@@ -237,77 +217,42 @@ const upsertEtapa = async ({
   }
 };
 
-// ─────────────────────────────────────────────────────────
-// ETAPAS — cada una acepta { consultores_ids: [...] }
-// ─────────────────────────────────────────────────────────
-
-/** PUT /procesos/:id/levantamiento
- *  Body: { consultores_ids, fecha_levantamiento, observaciones }
- */
 export const upsertLevantamiento = (req, res) => {
-  const { consultores_ids, fecha_levantamiento, observaciones } = req.body;
+  const { consultores_ids, fecha_levantamiento, observaciones, proximos_pasos, estado_id } = req.body;
   return upsertEtapa({
-    Modelo: EtapaLevantamiento,
-    procesoId: req.params.id,
-    datos: { fecha_levantamiento, observaciones },
-    consultores_ids,
-    aliasSet: "setConsultores",
-    res,
-    nombreEtapa: "Levantamiento",
+    Modelo: EtapaLevantamiento, procesoId: req.params.id,
+    datos: { fecha_levantamiento, observaciones, proximos_pasos, estado_id: estado_id || null },
+    consultores_ids, aliasSet: "setConsultores", res, nombreEtapa: "Levantamiento",
   });
 };
 
-/** PUT /procesos/:id/estimacion
- *  Body: { consultores_ids, fecha_estimacion, observaciones }
- */
 export const upsertEstimacion = (req, res) => {
-  const { consultores_ids, fecha_estimacion, observaciones } = req.body;
+  const { consultores_ids, fecha_estimacion, observaciones, proximos_pasos, estado_id } = req.body;
   return upsertEtapa({
-    Modelo: EtapaEstimacion,
-    procesoId: req.params.id,
-    datos: { fecha_estimacion, observaciones },
-    consultores_ids,
-    aliasSet: "setConsultores",
-    res,
-    nombreEtapa: "Estimación",
+    Modelo: EtapaEstimacion, procesoId: req.params.id,
+    datos: { fecha_estimacion, observaciones, proximos_pasos, estado_id: estado_id || null },
+    consultores_ids, aliasSet: "setConsultores", res, nombreEtapa: "Estimación",
   });
 };
 
 export const upsertPropuesta = (req, res) => {
-  const {
-    consultores_ids, nivel_detalle, fecha_entrega_propuesta,
-    valor_presupuestado, horas_presupuestadas, observaciones,
-  } = req.body;
+  const { consultores_ids, nivel_detalle, fecha_entrega_propuesta, valor_presupuestado, horas_presupuestadas, observaciones } = req.body;
   return upsertEtapa({
-    Modelo: EtapaPropuesta,
-    procesoId: req.params.id,
+    Modelo: EtapaPropuesta, procesoId: req.params.id,
     datos: { nivel_detalle, fecha_entrega_propuesta, valor_presupuestado, horas_presupuestadas, observaciones },
-    consultores_ids,
-    aliasSet: "setConsultores",
-    res,
-    nombreEtapa: "Propuesta",
+    consultores_ids, aliasSet: "setConsultores", res, nombreEtapa: "Propuesta",
   });
 };
 
-/** PUT /procesos/:id/preliminar
- *  Body: { consultores_ids, fecha_preliminar, resultado, observaciones, viable }
- */
 export const upsertPreliminar = (req, res) => {
   const { consultores_ids, fecha_preliminar, resultado, observaciones, viable } = req.body;
   return upsertEtapa({
-    Modelo: EtapaPreliminar,
-    procesoId: req.params.id,
+    Modelo: EtapaPreliminar, procesoId: req.params.id,
     datos: { fecha_preliminar, resultado, observaciones, viable },
-    consultores_ids,
-    aliasSet: "setConsultores",
-    res,
-    nombreEtapa: "Preliminar",
+    consultores_ids, aliasSet: "setConsultores", res, nombreEtapa: "Preliminar",
   });
 };
 
-/** PUT /procesos/:id/aprobacion
- *  Body: { consultores_ids, aprobado, fecha_aprobacion, motivo_rechazo, fecha_rechazo, observaciones }
- */
 export const upsertAprobacion = async (req, res) => {
   const { consultores_ids, aprobado, fecha_aprobacion, motivo_rechazo, fecha_rechazo, observaciones } = req.body;
 
@@ -319,28 +264,17 @@ export const upsertAprobacion = async (req, res) => {
   const proceso = await Proceso.findByPk(req.params.id);
   if (!proceso) return res.status(404).json({ ok: false, mensaje: "Proceso no encontrado." });
 
-await proceso.update({
-  estado_id: await getEstadoId(aprobado ? "Aprobado" : "Rechazado"),
-});
+  await proceso.update({ estado_id: await getEstadoId(aprobado ? "Aprobado" : "Rechazado") });
+
   return upsertEtapa({
-    Modelo: EtapaAprobacion,
-    procesoId: req.params.id,
+    Modelo: EtapaAprobacion, procesoId: req.params.id,
     datos: { aprobado, fecha_aprobacion, motivo_rechazo, fecha_rechazo, observaciones },
-    consultores_ids,
-    aliasSet: "setConsultores",
-    res,
-    nombreEtapa: "Aprobación",
+    consultores_ids, aliasSet: "setConsultores", res, nombreEtapa: "Aprobación",
   });
 };
 
-/** PUT /procesos/:id/ejecucion
- *  Body: { consultores_ids, consultor_responsable_id, fecha_inicio, fecha_fin, horas_reales, observaciones }
- */
 export const upsertEjecucion = async (req, res) => {
-  const {
-    consultores_ids, consultor_responsable_id,
-    fecha_inicio, fecha_fin, horas_reales, observaciones,
-  } = req.body;
+  const { consultores_ids, consultor_responsable_id, fecha_inicio, fecha_fin, horas_reales, observaciones } = req.body;
 
   if (!fecha_inicio)
     return res.status(400).json({ ok: false, mensaje: "'fecha_inicio' es obligatorio." });
@@ -349,23 +283,16 @@ export const upsertEjecucion = async (req, res) => {
   if (!proceso) return res.status(404).json({ ok: false, mensaje: "Proceso no encontrado." });
 
   const etapaExistente = await EtapaEjecucion.findOne({ where: { proceso_id: req.params.id } });
-if (!etapaExistente) {
-  await proceso.update({ estado_id: await getEstadoId("En Ejecución") });
-}
+  if (!etapaExistente)
+    await proceso.update({ estado_id: await getEstadoId("En Ejecución") });
+
   return upsertEtapa({
-    Modelo: EtapaEjecucion,
-    procesoId: req.params.id,
+    Modelo: EtapaEjecucion, procesoId: req.params.id,
     datos: { consultor_responsable_id, fecha_inicio, fecha_fin, horas_reales, observaciones },
-    consultores_ids,
-    aliasSet: "setConsultores",
-    res,
-    nombreEtapa: "Ejecución",
+    consultores_ids, aliasSet: "setConsultores", res, nombreEtapa: "Ejecución",
   });
 };
 
-// ─────────────────────────────────────────────────────────
-// INTERACCIONES
-// ─────────────────────────────────────────────────────────
 export const listarInteracciones = async (req, res) => {
   try {
     const proceso = await Proceso.findByPk(req.params.id);
@@ -399,13 +326,7 @@ export const crearInteraccion = async (req, res) => {
     const consultor = await Consultor.findByPk(consultor_id);
     if (!consultor) return res.status(404).json({ ok: false, mensaje: "Consultor no encontrado." });
 
-    const interaccion = await Interaccion.create({
-      proceso_id:  req.params.id,
-      consultor_id,
-      tipo,
-      descripcion,
-      fecha,
-    });
+    const interaccion = await Interaccion.create({ proceso_id: req.params.id, consultor_id, tipo, descripcion, fecha });
 
     return res.status(201).json({ ok: true, mensaje: "Interacción registrada.", data: interaccion });
   } catch (err) {
@@ -426,5 +347,118 @@ export const eliminarInteraccion = async (req, res) => {
   } catch (err) {
     console.error("[eliminarInteraccion]", err);
     return res.status(500).json({ ok: false, mensaje: "Error al eliminar interacción.", detalle: err.message });
+  }
+};
+export const crearInteraccionLevantamiento = async (req, res) => {
+  try {
+    const etapa = await EtapaLevantamiento.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(404).json({ ok: false, mensaje: "Etapa de levantamiento no encontrada." });
+
+    const { consultores_ids = [], fecha, observaciones, proximos_pasos, estado_id } = req.body;
+    if (!fecha) return res.status(400).json({ ok: false, mensaje: "'fecha' es obligatoria." });
+
+    const interaccion = await InteraccionLevantamiento.create({
+      etapa_levantamiento_id: etapa.id, fecha, observaciones, proximos_pasos,
+      estado_id: estado_id || null,
+    });
+
+    if (consultores_ids.length > 0) await interaccion.setConsultores(consultores_ids);
+
+    const resultado = await InteraccionLevantamiento.findByPk(interaccion.id, {
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ]
+    });
+    return res.status(201).json({ ok: true, data: resultado });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const eliminarInteraccionLevantamiento = async (req, res) => {
+  try {
+    const interaccion = await InteraccionLevantamiento.findByPk(req.params.interaccionId);
+    if (!interaccion) return res.status(404).json({ ok: false, mensaje: "Interacción no encontrada." });
+    await interaccion.destroy();
+    return res.status(200).json({ ok: true, mensaje: "Interacción eliminada." });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const crearInteraccionEstimacion = async (req, res) => {
+  try {
+    const etapa = await EtapaEstimacion.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(404).json({ ok: false, mensaje: "Etapa de estimación no encontrada." });
+
+    const { consultores_ids = [], fecha, observaciones, proximos_pasos, estado_id } = req.body;
+    if (!fecha) return res.status(400).json({ ok: false, mensaje: "'fecha' es obligatoria." });
+
+    const interaccion = await InteraccionEstimacion.create({
+      etapa_estimacion_id: etapa.id, fecha, observaciones, proximos_pasos,
+      estado_id: estado_id || null,
+    });
+
+    if (consultores_ids.length > 0) await interaccion.setConsultores(consultores_ids);
+
+    const resultado = await InteraccionEstimacion.findByPk(interaccion.id, {
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ]
+    });
+    return res.status(201).json({ ok: true, data: resultado });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const eliminarInteraccionEstimacion = async (req, res) => {
+  try {
+    const interaccion = await InteraccionEstimacion.findByPk(req.params.interaccionId);
+    if (!interaccion) return res.status(404).json({ ok: false, mensaje: "Interacción no encontrada." });
+    await interaccion.destroy();
+    return res.status(200).json({ ok: true, mensaje: "Interacción eliminada." });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const listarInteraccionesLevantamiento = async (req, res) => {
+  try {
+    const etapa = await EtapaLevantamiento.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(200).json({ ok: true, data: [] });
+
+    const interacciones = await InteraccionLevantamiento.findAll({
+      where:   { etapa_levantamiento_id: etapa.id },
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ],
+      order: [["fecha", "DESC"]],
+    });
+    return res.status(200).json({ ok: true, data: interacciones });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const listarInteraccionesEstimacion = async (req, res) => {
+  try {
+    const etapa = await EtapaEstimacion.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(200).json({ ok: true, data: [] });
+
+    const interacciones = await InteraccionEstimacion.findAll({
+      where:   { etapa_estimacion_id: etapa.id },
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ],
+      order: [["fecha", "DESC"]],
+    });
+    return res.status(200).json({ ok: true, data: interacciones });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
   }
 };

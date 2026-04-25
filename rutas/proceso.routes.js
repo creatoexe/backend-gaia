@@ -18,6 +18,12 @@ import {
   listarInteracciones,
   crearInteraccion,
   eliminarInteraccion,
+  crearInteraccionLevantamiento,
+  eliminarInteraccionLevantamiento,
+  crearInteraccionEstimacion,
+  eliminarInteraccionEstimacion,
+  listarInteraccionesLevantamiento,
+  listarInteraccionesEstimacion,
 } from "../controladores/proceso.controller.js";
 
 const router = Router();
@@ -97,5 +103,11 @@ router.delete(
   "/procesos/:id/interacciones/:interaccionId",
   eliminarInteraccion
 );
+router.post("/procesos/:id/levantamiento/interacciones",                     crearInteraccionLevantamiento);
+router.delete("/procesos/:id/levantamiento/interacciones/:interaccionId",    eliminarInteraccionLevantamiento);
+router.post("/procesos/:id/estimacion/interacciones",                        crearInteraccionEstimacion);
+router.delete("/procesos/:id/estimacion/interacciones/:interaccionId",       eliminarInteraccionEstimacion);
+router.get("/procesos/:id/levantamiento/interacciones", listarInteraccionesLevantamiento);
+router.get("/procesos/:id/estimacion/interacciones",    listarInteraccionesEstimacion);
 
 export default router;
