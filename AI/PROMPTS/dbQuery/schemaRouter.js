@@ -1,12 +1,15 @@
 const KEYWORDS = {
-  clientes:   ['cliente', 'empresa', 'compañia', 'rubro', 'referido', 'precio hora'],
-  proyectos:  ['proyecto', 'lead', 'aprobado', 'rechazado', 'ejecuc', 'stand by'],
-  procesos:   ['proceso', 'automatizac', 'propuesta', 'estimac', 'levantamiento', 'probabilidad'],
+  clientes:     ['cliente', 'empresa', 'compañia', 'rubro', 'referido', 'precio hora'],
+  proyectos:    ['proyecto', 'lead', 'aprobado', 'rechazado', 'ejecuc', 'stand by'],
+  procesos:     ['proceso', 'automatizac', 'propuesta', 'estimac', 'levantamiento', 'probabilidad'],
   seguimientos: ['seguimiento', 'contacto', 'llamada', 'reunion', 'whatsapp', 'linkedin'],
-  consultores: ['consultor', 'admin', 'equipo', 'asignado'],
-  etapas:     ['etapa', 'horas', 'fecha inicio', 'fecha fin', 'aprobacion', 'ejecucion'],
-  herramientas: ['rpa', 'licencia', 'herramienta', 'uipath', 'automation anywhere'],
-  geografico: ['pais', 'ciudad', 'region'],
+  consultores:  ['consultor', 'admin', 'equipo', 'asignado'],
+  etapas:       ['etapa', 'horas', 'fecha inicio', 'fecha fin', 'aprobacion', 'ejecucion'],
+  herramientas: ['herramienta', 'rpa', 'uipath', 'automation anywhere', 'fabricante', 'bot'],
+  licencias:    ['licencia', 'activada', 'desactivada', 'renovacion', 'ip maquina', 'valor anual', 'cod licencia', 'expiracion'],
+  soporte:      ['soporte', 'paquete soporte', 'tarifa soporte', 'horario', 'dias soporte', 'motivo rechazo', 'fecha inicio soporte'],
+  geografico:   ['pais', 'ciudad', 'region'],
+  envio:        ['enviar', 'archivo', 'adjuntar', 'correo', 'email', 'mandar', 'reenviar', 'compartir'],
 };
 
 const SCHEMA_FRAGMENTS = {
@@ -40,23 +43,41 @@ const SCHEMA_FRAGMENTS = {
 ── consultores (id UUID, nombre, email, rol ENUM('consultor','admin'), telefono, activo, fecha_ingreso)`,
 
   herramientas: `
-── herramientas_rpa (id UUID, nombre, fabricante, activo)
+── herramientas_rpa (id UUID, nombre, fabricante, activo BOOL, createdAt, updatedAt)
 ── asignacion_herramienta (id UUID, proyecto_id, herramienta_rpa_id, cod_licencia, fecha_asignacion, fecha_expiracion, estado ENUM('Activa','Suspendida','Expirada','Revocada'))`,
+
+  licencias: `
+── licencias (id UUID, cliente_id→clientes, herramienta_id→herramientas_rpa, estado ENUM('Activada','Desactivada'), fecha_inicio DATE, renovacion ENUM('mensual','anual','2 años','3 años'), valor_anual DECIMAL(12,2), ip_maquina VARCHAR(45), fecha_estado DATE, motivo_desactivacion TEXT, created_by→consultores, updated_by→consultores, createdAt, updatedAt)`,
+
+  soporte: `
+── soportes (id UUID, cliente_id→clientes, responsable_cliente_id→usuario_cliente nullable, created_by→consultores, updated_by→consultores, estado ENUM('En Aprobación','Aprobado','Rechazado'), propuesta TEXT, horas INT, tarifa DECIMAL(12,2), valor_paquete DECIMAL(12,2), fecha_inicio DATE, fecha_fin DATE, horario VARCHAR(100), dias JSON, observacion TEXT, fecha_aprobacion DATE, fecha_rechazo DATE, motivo_rechazo TEXT, fecha_inicio_soporte DATE, createdAt, updatedAt)`,
 
   geografico: `
 ── paises (id INT, nombre), ciudades (id INT, nombre, pais_id→paises)`,
+
+  envio: `
+── ACCIÓN: ENVIAR ARCHIVO A CONSULTOR
+   Requiere: consultor_email (de tabla consultores), asunto, mensaje, archivo (adjunto o link)
+   La tabla consultores contiene: id, nombre, email.
+   No es una consulta SELECT; es una operación de escritura que debe manejarse por endpoint /api/email/enviar-archivo.
+   Si el usuario expresa intención de enviar archivo a un consultor, recopila:
+     - consultor (nombre o email)
+     - asunto (si no lo da, usa "Documento compartido")
+     - mensaje (opcional)
+     - archivo (si el usuario adjuntó un archivo, se usará esa URL; si no, se puede pedir que lo adjunte)
+   `,
 };
 
 const RULES = `
 REGLAS: Solo SELECT. LIMIT 50. LOWER() para texto. MySQL solo (no PostgreSQL).
-Alias: c=clientes,co=consultores,p=proyectos,pr=procesos,uc=usuario_cliente,sc=seguimientos_clientes.
+Alias: c=clientes,co=consultores,p=proyectos,pr=procesos,uc=usuario_cliente,sc=seguimientos_clientes,s=soportes,l=licencias,h=herramientas_rpa.
 Fechas: NOW(),CURDATE(),DATE_SUB(),DATE_FORMAT(). probabilidad_aprobacion=VARCHAR→CAST AS DECIMAL.
 clientes NO tiene campo "nombre", usa "empresa".
 NUNCA expongas: password, token_verificacion.`;
 
 export function resolveSchemaFragments(pregunta, historial = []) {
   const texto = (pregunta + ' ' + historial.map(m => m.contenido).join(' ')).toLowerCase();
-  
+
   const dominios = new Set();
   for (const [dominio, keywords] of Object.entries(KEYWORDS)) {
     if (keywords.some(k => texto.includes(k))) {
@@ -67,10 +88,12 @@ export function resolveSchemaFragments(pregunta, historial = []) {
   if (dominios.size === 0 || dominios.size >= 5) {
     return Object.values(SCHEMA_FRAGMENTS).join('\n') + '\n' + RULES;
   }
-  if (dominios.has('etapas')) dominios.add('consultores');
-  // Siempre incluir clientes si hay proyectos o seguimientos
+
+  if (dominios.has('etapas'))   dominios.add('consultores');
+  if (dominios.has('licencias')) dominios.add('herramientas');
+  if (dominios.has('soporte'))   dominios.add('clientes');
   if (dominios.has('proyectos') || dominios.has('seguimientos')) dominios.add('clientes');
 
-  const schemaSeleccionado = [...dominios].map(d => SCHEMA_FRAGMENTS[d]).join('\n');
+  const schemaSeleccionado = [...dominios].map(d => SCHEMA_FRAGMENTS[d]).filter(Boolean).join('\n');
   return schemaSeleccionado + '\n' + RULES;
 }

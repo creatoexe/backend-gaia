@@ -19,6 +19,10 @@ import reporteRoutes        from "./rutas/reporte.routes.js";
 import chatRoutes           from "./rutas/chat.routes.js";
 import aiApp                from "./rutas/ai.routes.js";
 import calendarRoutes from './rutas/calendario.routes.js';
+import soporteRoutes from "./rutas/soporte.routes.js";
+import licenciaRoutes from "./rutas/licencia.routes.js";
+import emailRoutes from "./rutas/email.routes.js";
+import pipelineRoutes from "./rutas/pipeline.routes.js";
 import { cargarCatalogos }  from "./seeders/catalogosSeed.js";
 
 const app  = express();
@@ -39,8 +43,11 @@ api.use(reporteRoutes);
 api.use(chatRoutes);
 api.use(aiApp);
 api.use(estadosRoutes);
-app.use(calendarRoutes);
-
+api.use(calendarRoutes);
+api.use(soporteRoutes);
+api.use(licenciaRoutes);
+api.use(emailRoutes);
+api.use(pipelineRoutes);
 
 app.use("/api", api);
 

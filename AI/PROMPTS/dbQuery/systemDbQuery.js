@@ -13,5 +13,10 @@ SCHEMA RELEVANTE:
 ${schema}
 
 FORMATO OBLIGATORIO (sin backticks, sin texto extra):
-{"queryValida":true,"razon":"string","query":"SELECT...","parametros":[]}`);
+{
+  "queryValida": false, 
+  "razon": "operación de escritura — debe manejarse por endpoint dedicado. Datos recopilados: { ... }",
+  "query": null,
+  "parametros": []
+}`);
 };

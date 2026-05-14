@@ -1,4 +1,4 @@
-import { INCLUDE_PROCESO, TIPOS_INTERACCION } from "../Helpers/h_proceso.js";
+import { INCLUDE_PROCESO,  INCLUDE_PROCESO_LIST,  TIPOS_INTERACCION } from "../Helpers/h_proceso.js";
 import {
   Proceso,
   Proyecto,
@@ -14,10 +14,23 @@ import {
   InteraccionEstimacion,
   InteraccionLevantamiento,
   Estados,
+  InteraccionPropuesta,
+  InteraccionAprobacion,
+  EtapaAprobado,
+  InteraccionAprobado,
+  EtapaCierre,
+  InteraccionCierre,
+  InteraccionFacturado,
+  EtapaFacturado,
+  EtapaRechazado,
+  InteraccionRechazado,
+  EtapaStandBy,
+  InteraccionStandBy,
 } from "../modelos/relations.js";
 import { getEstadoId, resolverEstadoId } from "../Helpers/h_estados.js";
 
 const TIPOS_CLASIFICACION = ["Proyecto Nuevo", "Solicitud de Cambio"];
+
 
 export const listarProcesos = async (req, res) => {
   try {
@@ -26,22 +39,23 @@ export const listarProcesos = async (req, res) => {
 
     const where = {};
     if (proyectoIdParam) where.proyecto_id = proyectoIdParam;
-    if (estatus)         where.estatus      = estatus;
-    if (tipo)            where.tipo         = tipo;
+    if (tipo)            where.tipo        = tipo;
 
     const offset = (Math.max(1, +page) - 1) * +limit;
 
-    const { count, rows } = await Proceso.findAndCountAll({
+    const count = await Proceso.count({ where });
+
+    const rows = await Proceso.findAll({
       where,
-      include:  INCLUDE_PROCESO,
-      order:    [["createdAt", "DESC"]],
-      limit:    +limit,
+      include: INCLUDE_PROCESO_LIST, 
+      order:   [["createdAt", "DESC"]],
+      limit:   +limit,
       offset,
-      distinct: true,
     });
 
     return res.status(200).json({
-      ok: true, total: count, page: +page, pages: Math.ceil(count / +limit), data: rows,
+      ok: true, total: count, page: +page,
+      pages: Math.ceil(count / +limit), data: rows,
     });
   } catch (err) {
     console.error("[listarProcesos]", err);
@@ -49,18 +63,17 @@ export const listarProcesos = async (req, res) => {
   }
 };
 
+
 export const obtenerProceso = async (req, res) => {
   try {
     const proceso = await Proceso.findByPk(req.params.id, { include: INCLUDE_PROCESO });
     if (!proceso) return res.status(404).json({ ok: false, mensaje: "Proceso no encontrado." });
-
     return res.status(200).json({ ok: true, data: proceso });
   } catch (err) {
     console.error("[obtenerProceso]", err);
     return res.status(500).json({ ok: false, mensaje: "Error al obtener proceso.", detalle: err.message });
   }
 };
-
 export const crearProceso = async (req, res) => {
   try {
     const { proyectoId } = req.params;
@@ -254,7 +267,7 @@ export const upsertPreliminar = (req, res) => {
 };
 
 export const upsertAprobacion = async (req, res) => {
-  const { consultores_ids, aprobado, fecha_aprobacion, motivo_rechazo, fecha_rechazo, observaciones } = req.body;
+  const { consultores_ids, aprobado, fecha_aprobacion, motivo_rechazo, fecha_rechazo, observaciones ,estado_id} = req.body;
 
   if (typeof aprobado !== "boolean")
     return res.status(400).json({ ok: false, mensaje: "'aprobado' debe ser boolean." });
@@ -268,13 +281,20 @@ export const upsertAprobacion = async (req, res) => {
 
   return upsertEtapa({
     Modelo: EtapaAprobacion, procesoId: req.params.id,
-    datos: { aprobado, fecha_aprobacion, motivo_rechazo, fecha_rechazo, observaciones },
+    datos: { aprobado, fecha_aprobacion, motivo_rechazo,
+             fecha_rechazo, observaciones,
+             estado_id: estado_id || null },
     consultores_ids, aliasSet: "setConsultores", res, nombreEtapa: "Aprobación",
   });
 };
 
+
 export const upsertEjecucion = async (req, res) => {
-  const { consultores_ids, consultor_responsable_id, fecha_inicio, fecha_fin, horas_reales, observaciones } = req.body;
+  const {
+    consultores_ids,
+    fecha_inicio, fecha_fin, horas_reales,
+    observaciones, proximos_pasos, estado_id   
+  } = req.body;
 
   if (!fecha_inicio)
     return res.status(400).json({ ok: false, mensaje: "'fecha_inicio' es obligatorio." });
@@ -288,9 +308,71 @@ export const upsertEjecucion = async (req, res) => {
 
   return upsertEtapa({
     Modelo: EtapaEjecucion, procesoId: req.params.id,
-    datos: { consultor_responsable_id, fecha_inicio, fecha_fin, horas_reales, observaciones },
+    datos: {
+      fecha_inicio, fecha_fin,
+      horas_reales, observaciones,
+      proximos_pasos: proximos_pasos || null, 
+      estado_id: estado_id || null,            
+    },
     consultores_ids, aliasSet: "setConsultores", res, nombreEtapa: "Ejecución",
   });
+};
+
+export const listarInteraccionesEjecucion = async (req, res) => {
+  try {
+    const etapa = await EtapaEjecucion.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(200).json({ ok: true, data: [] });
+
+    const interacciones = await InteraccionEjecucion.findAll({
+      where:   { etapa_ejecucion_id: etapa.id },
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ],
+      order: [["fecha", "DESC"]],
+    });
+    return res.status(200).json({ ok: true, data: interacciones });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const crearInteraccionEjecucion = async (req, res) => {
+  try {
+    const etapa = await EtapaEjecucion.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(404).json({ ok: false, mensaje: "Etapa de ejecución no encontrada." });
+
+    const { consultores_ids = [], fecha, observaciones, proximos_pasos, estado_id } = req.body;
+    if (!fecha) return res.status(400).json({ ok: false, mensaje: "'fecha' es obligatoria." });
+
+    const interaccion = await InteraccionEjecucion.create({
+      etapa_ejecucion_id: etapa.id, fecha, observaciones, proximos_pasos,
+      estado_id: estado_id || null,
+    });
+
+    if (consultores_ids.length > 0) await interaccion.setConsultores(consultores_ids);
+
+    const resultado = await InteraccionEjecucion.findByPk(interaccion.id, {
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ]
+    });
+    return res.status(201).json({ ok: true, data: resultado });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const eliminarInteraccionEjecucion = async (req, res) => {
+  try {
+    const interaccion = await InteraccionEjecucion.findByPk(req.params.interaccionId);
+    if (!interaccion) return res.status(404).json({ ok: false, mensaje: "Interacción no encontrada." });
+    await interaccion.destroy();
+    return res.status(200).json({ ok: true, mensaje: "Interacción eliminada." });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
 };
 
 export const listarInteracciones = async (req, res) => {
@@ -458,6 +540,468 @@ export const listarInteraccionesEstimacion = async (req, res) => {
       order: [["fecha", "DESC"]],
     });
     return res.status(200).json({ ok: true, data: interacciones });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const crearInteraccionPropuesta = async (req, res) => {
+  try {
+    const etapa = await EtapaPropuesta.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(404).json({ ok: false, mensaje: "Etapa de propuesta no encontrada." });
+
+    const { consultores_ids = [], fecha, observaciones, proximos_pasos, estado_id } = req.body;
+    if (!fecha) return res.status(400).json({ ok: false, mensaje: "'fecha' es obligatoria." });
+
+    const interaccion = await InteraccionPropuesta.create({
+      etapa_propuesta_id: etapa.id, fecha, observaciones, proximos_pasos,
+      estado_id: estado_id || null,
+    });
+
+    if (consultores_ids.length > 0) await interaccion.setConsultores(consultores_ids);
+
+    const resultado = await InteraccionPropuesta.findByPk(interaccion.id, {
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ]
+    });
+    return res.status(201).json({ ok: true, data: resultado });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const eliminarInteraccionPropuesta = async (req, res) => {
+  try {
+    const interaccion = await InteraccionPropuesta.findByPk(req.params.interaccionId);
+    if (!interaccion) return res.status(404).json({ ok: false, mensaje: "Interacción no encontrada." });
+    await interaccion.destroy();
+    return res.status(200).json({ ok: true, mensaje: "Interacción eliminada." });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const listarInteraccionesPropuesta = async (req, res) => {
+  try {
+    const etapa = await EtapaPropuesta.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(200).json({ ok: true, data: [] });
+
+    const interacciones = await InteraccionPropuesta.findAll({
+      where:   { etapa_propuesta_id: etapa.id },
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ],
+      order: [["fecha", "DESC"]],
+    });
+    return res.status(200).json({ ok: true, data: interacciones });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+
+export const listarInteraccionesAprobacion = async (req, res) => {
+  try {
+    const etapa = await EtapaAprobacion.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(200).json({ ok: true, data: [] });
+
+    const interacciones = await InteraccionAprobacion.findAll({
+      where:   { etapa_aprobacion_id: etapa.id },
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ],
+      order: [["fecha", "DESC"]],
+    });
+    return res.status(200).json({ ok: true, data: interacciones });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const crearInteraccionAprobacion = async (req, res) => {
+  try {
+    const etapa = await EtapaAprobacion.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(404).json({ ok: false, mensaje: "Etapa de aprobación no encontrada." });
+
+    const { consultores_ids = [], fecha, observaciones, proximos_pasos, estado_id } = req.body;
+    if (!fecha) return res.status(400).json({ ok: false, mensaje: "'fecha' es obligatoria." });
+
+    const interaccion = await InteraccionAprobacion.create({
+      etapa_aprobacion_id: etapa.id, fecha, observaciones, proximos_pasos,
+      estado_id: estado_id || null,
+    });
+
+    if (consultores_ids.length > 0) await interaccion.setConsultores(consultores_ids);
+
+    const resultado = await InteraccionAprobacion.findByPk(interaccion.id, {
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ]
+    });
+    return res.status(201).json({ ok: true, data: resultado });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const eliminarInteraccionAprobacion = async (req, res) => {
+  try {
+    const interaccion = await InteraccionAprobacion.findByPk(req.params.interaccionId);
+    if (!interaccion) return res.status(404).json({ ok: false, mensaje: "Interacción no encontrada." });
+    await interaccion.destroy();
+    return res.status(200).json({ ok: true, mensaje: "Interacción eliminada." });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const upsertAprobado = (req, res) => {
+  const { consultores_ids, fecha_aprobado, observaciones, proximos_pasos, estado_id } = req.body;
+  return upsertEtapa({
+    Modelo: EtapaAprobado, procesoId: req.params.id,
+    datos: { fecha_aprobado, observaciones, proximos_pasos, estado_id: estado_id || null },
+    consultores_ids, aliasSet: "setConsultores", res, nombreEtapa: "Aprobado",
+  });
+};
+
+export const listarInteraccionesAprobado = async (req, res) => {
+  try {
+    const etapa = await EtapaAprobado.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(200).json({ ok: true, data: [] });
+
+    const interacciones = await InteraccionAprobado.findAll({
+      where:   { etapa_aprobado_id: etapa.id },
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ],
+      order: [["fecha", "DESC"]],
+    });
+    return res.status(200).json({ ok: true, data: interacciones });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const crearInteraccionAprobado = async (req, res) => {
+  try {
+    const etapa = await EtapaAprobado.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(404).json({ ok: false, mensaje: "Etapa Aprobado no encontrada." });
+
+    const { consultores_ids = [], fecha, observaciones, proximos_pasos, estado_id } = req.body;
+    if (!fecha) return res.status(400).json({ ok: false, mensaje: "'fecha' es obligatoria." });
+
+    const interaccion = await InteraccionAprobado.create({
+      etapa_aprobado_id: etapa.id, fecha, observaciones, proximos_pasos,
+      estado_id: estado_id || null,
+    });
+
+    if (consultores_ids.length > 0) await interaccion.setConsultores(consultores_ids);
+
+    const resultado = await InteraccionAprobado.findByPk(interaccion.id, {
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ]
+    });
+    return res.status(201).json({ ok: true, data: resultado });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const eliminarInteraccionAprobado = async (req, res) => {
+  try {
+    const interaccion = await InteraccionAprobado.findByPk(req.params.interaccionId);
+    if (!interaccion) return res.status(404).json({ ok: false, mensaje: "Interacción no encontrada." });
+    await interaccion.destroy();
+    return res.status(200).json({ ok: true, mensaje: "Interacción eliminada." });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const upsertCierre = (req, res) => {
+  const { consultores_ids, fecha_cierre, observaciones, proximos_pasos, estado_id } = req.body;
+  return upsertEtapa({
+    Modelo: EtapaCierre, procesoId: req.params.id,
+    datos: { fecha_cierre, observaciones, proximos_pasos, estado_id: estado_id || null },
+    consultores_ids, aliasSet: "setConsultores", res, nombreEtapa: "Cierre",
+  });
+};
+
+export const listarInteraccionesCierre = async (req, res) => {
+  try {
+    const etapa = await EtapaCierre.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(200).json({ ok: true, data: [] });
+
+    const interacciones = await InteraccionCierre.findAll({
+      where:   { etapa_cierre_id: etapa.id },
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ],
+      order: [["fecha", "DESC"]],
+    });
+    return res.status(200).json({ ok: true, data: interacciones });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const crearInteraccionCierre = async (req, res) => {
+  try {
+    const etapa = await EtapaCierre.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(404).json({ ok: false, mensaje: "Etapa de cierre no encontrada." });
+
+    const { consultores_ids = [], fecha, observaciones, proximos_pasos, estado_id } = req.body;
+    if (!fecha) return res.status(400).json({ ok: false, mensaje: "'fecha' es obligatoria." });
+
+    const interaccion = await InteraccionCierre.create({
+      etapa_cierre_id: etapa.id, fecha, observaciones, proximos_pasos,
+      estado_id: estado_id || null,
+    });
+
+    if (consultores_ids.length > 0) await interaccion.setConsultores(consultores_ids);
+
+    const resultado = await InteraccionCierre.findByPk(interaccion.id, {
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ]
+    });
+    return res.status(201).json({ ok: true, data: resultado });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const eliminarInteraccionCierre = async (req, res) => {
+  try {
+    const interaccion = await InteraccionCierre.findByPk(req.params.interaccionId);
+    if (!interaccion) return res.status(404).json({ ok: false, mensaje: "Interacción no encontrada." });
+    await interaccion.destroy();
+    return res.status(200).json({ ok: true, mensaje: "Interacción eliminada." });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const upsertFacturado = (req, res) => {
+  const {
+    consultores_ids, numero_factura, fecha_factura,
+    valor_facturado, fecha_vencimiento, estado_cobro,
+    observaciones, proximos_pasos, estado_id
+  } = req.body;
+  return upsertEtapa({
+    Modelo: EtapaFacturado, procesoId: req.params.id,
+    datos: {
+      numero_factura, fecha_factura, valor_facturado,
+      fecha_vencimiento, estado_cobro,
+      observaciones, proximos_pasos,
+      estado_id: estado_id || null
+    },
+    consultores_ids, aliasSet: "setConsultores", res, nombreEtapa: "Facturado",
+  });
+};
+
+export const listarInteraccionesFacturado = async (req, res) => {
+  try {
+    const etapa = await EtapaFacturado.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(200).json({ ok: true, data: [] });
+
+    const interacciones = await InteraccionFacturado.findAll({
+      where:   { etapa_facturado_id: etapa.id },
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ],
+      order: [["fecha", "DESC"]],
+    });
+    return res.status(200).json({ ok: true, data: interacciones });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const crearInteraccionFacturado = async (req, res) => {
+  try {
+    const etapa = await EtapaFacturado.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(404).json({ ok: false, mensaje: "Etapa de facturado no encontrada." });
+
+    const { consultores_ids = [], fecha, observaciones, proximos_pasos, estado_id } = req.body;
+    if (!fecha) return res.status(400).json({ ok: false, mensaje: "'fecha' es obligatoria." });
+
+    const interaccion = await InteraccionFacturado.create({
+      etapa_facturado_id: etapa.id, fecha, observaciones, proximos_pasos,
+      estado_id: estado_id || null,
+    });
+
+    if (consultores_ids.length > 0) await interaccion.setConsultores(consultores_ids);
+
+    const resultado = await InteraccionFacturado.findByPk(interaccion.id, {
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ]
+    });
+    return res.status(201).json({ ok: true, data: resultado });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const eliminarInteraccionFacturado = async (req, res) => {
+  try {
+    const interaccion = await InteraccionFacturado.findByPk(req.params.interaccionId);
+    if (!interaccion) return res.status(404).json({ ok: false, mensaje: "Interacción no encontrada." });
+    await interaccion.destroy();
+    return res.status(200).json({ ok: true, mensaje: "Interacción eliminada." });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const upsertRechazado = (req, res) => {
+  const {
+    consultores_ids, fecha_rechazo, motivo_categoria,
+    motivo_detalle, decision_por, recuperable,
+    fecha_recontacto, observaciones, proximos_pasos, estado_id
+  } = req.body;
+  return upsertEtapa({
+    Modelo: EtapaRechazado, procesoId: req.params.id,
+    datos: {
+      fecha_rechazo, motivo_categoria, motivo_detalle,
+      decision_por, recuperable, fecha_recontacto,
+      observaciones, proximos_pasos,
+      estado_id: estado_id || null
+    },
+    consultores_ids, aliasSet: "setConsultores", res, nombreEtapa: "Rechazado",
+  });
+};
+
+export const listarInteraccionesRechazado = async (req, res) => {
+  try {
+    const etapa = await EtapaRechazado.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(200).json({ ok: true, data: [] });
+    const interacciones = await InteraccionRechazado.findAll({
+      where:   { etapa_rechazado_id: etapa.id },
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ],
+      order: [["fecha", "DESC"]],
+    });
+    return res.status(200).json({ ok: true, data: interacciones });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const crearInteraccionRechazado = async (req, res) => {
+  try {
+    const etapa = await EtapaRechazado.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(404).json({ ok: false, mensaje: "Etapa rechazado no encontrada." });
+    const { consultores_ids = [], fecha, observaciones, proximos_pasos, estado_id } = req.body;
+    if (!fecha) return res.status(400).json({ ok: false, mensaje: "'fecha' es obligatoria." });
+    const interaccion = await InteraccionRechazado.create({
+      etapa_rechazado_id: etapa.id, fecha, observaciones,
+      proximos_pasos, estado_id: estado_id || null,
+    });
+    if (consultores_ids.length > 0) await interaccion.setConsultores(consultores_ids);
+    const resultado = await InteraccionRechazado.findByPk(interaccion.id, {
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ]
+    });
+    return res.status(201).json({ ok: true, data: resultado });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const eliminarInteraccionRechazado = async (req, res) => {
+  try {
+    const interaccion = await InteraccionRechazado.findByPk(req.params.interaccionId);
+    if (!interaccion) return res.status(404).json({ ok: false, mensaje: "Interacción no encontrada." });
+    await interaccion.destroy();
+    return res.status(200).json({ ok: true, mensaje: "Interacción eliminada." });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const upsertStandBy = (req, res) => {
+  const {
+    consultores_ids, fecha_inicio_pausa, fecha_estimada_retorno,
+    motivo_categoria, motivo_detalle, decision_por,
+    condicion_reactivar, observaciones, proximos_pasos, estado_id
+  } = req.body;
+  return upsertEtapa({
+    Modelo: EtapaStandBy, procesoId: req.params.id,
+    datos: {
+      fecha_inicio_pausa, fecha_estimada_retorno,
+      motivo_categoria, motivo_detalle, decision_por,
+      condicion_reactivar, observaciones, proximos_pasos,
+      estado_id: estado_id || null
+    },
+    consultores_ids, aliasSet: "setConsultores", res, nombreEtapa: "StandBy",
+  });
+};
+
+export const listarInteraccionesStandBy = async (req, res) => {
+  try {
+    const etapa = await EtapaStandBy.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(200).json({ ok: true, data: [] });
+    const interacciones = await InteraccionStandBy.findAll({
+      where:   { etapa_stand_by_id: etapa.id },
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ],
+      order: [["fecha", "DESC"]],
+    });
+    return res.status(200).json({ ok: true, data: interacciones });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const crearInteraccionStandBy = async (req, res) => {
+  try {
+    const etapa = await EtapaStandBy.findOne({ where: { proceso_id: req.params.id } });
+    if (!etapa) return res.status(404).json({ ok: false, mensaje: "Etapa Stand By no encontrada." });
+    const { consultores_ids = [], fecha, observaciones, proximos_pasos, estado_id } = req.body;
+    if (!fecha) return res.status(400).json({ ok: false, mensaje: "'fecha' es obligatoria." });
+    const interaccion = await InteraccionStandBy.create({
+      etapa_stand_by_id: etapa.id, fecha, observaciones,
+      proximos_pasos, estado_id: estado_id || null,
+    });
+    if (consultores_ids.length > 0) await interaccion.setConsultores(consultores_ids);
+    const resultado = await InteraccionStandBy.findByPk(interaccion.id, {
+      include: [
+        { model: Consultor, as: "consultores", attributes: ["id", "nombre"], through: { attributes: [] } },
+        { model: Estados,   as: "estadoObj",   attributes: ["id", "nombre"] },
+      ]
+    });
+    return res.status(201).json({ ok: true, data: resultado });
+  } catch (err) {
+    return res.status(500).json({ ok: false, mensaje: err.message });
+  }
+};
+
+export const eliminarInteraccionStandBy = async (req, res) => {
+  try {
+    const interaccion = await InteraccionStandBy.findByPk(req.params.interaccionId);
+    if (!interaccion) return res.status(404).json({ ok: false, mensaje: "Interacción no encontrada." });
+    await interaccion.destroy();
+    return res.status(200).json({ ok: true, mensaje: "Interacción eliminada." });
   } catch (err) {
     return res.status(500).json({ ok: false, mensaje: err.message });
   }

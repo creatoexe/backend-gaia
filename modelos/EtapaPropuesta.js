@@ -20,8 +20,6 @@ export const EtapaPropuesta = sequelize.define("EtapaPropuesta",{
     onUpdate: "CASCADE"
   },
 
- 
-
   nivel_detalle:{
     type:DataTypes.STRING
   },

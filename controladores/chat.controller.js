@@ -105,13 +105,18 @@ export const enviarMensaje = async (req, res) => {
     const { chatId } = req.params;
     const {
       pregunta,
-      provider     = "claude",
-      model        = null,
+      provider     = "deepseek",
+      model        = 'deepseek-v4-flash',
       currentRoute = "/",
+      webSearch    = "false",     
+      allowAttach  = "true",      
     } = req.body;
 
     if (!pregunta?.trim())
       return res.status(400).json({ ok: false, mensaje: "'pregunta' es obligatoria." });
+
+    const isWebSearch   = webSearch === "true" || webSearch === true;
+    const canAttach     = allowAttach === "true" || allowAttach === true;
 
     const [chat, contexto, mensajesRecientes, totalMensajes] = await Promise.all([
       Chat.findByPk(chatId),
@@ -134,7 +139,6 @@ export const enviarMensaje = async (req, res) => {
 
     const intencion_pendiente = contexto?.intencion_pendiente || null;
 
-    // ── 2. Guardar mensaje del usuario ───────────────────────
     await Mensaje.create({
       chat_id:      chatId,
       rol:          "user",
@@ -143,12 +147,11 @@ export const enviarMensaje = async (req, res) => {
       tokens:       null,
     });
 
-    // ── 3. Procesar archivos ─────────────────────────────────
-    const archivosTexto = await processFiles(req.files ?? []);
+    let archivosTexto = [];
+    if (canAttach && req.files && req.files.length > 0) {
+      archivosTexto = await processFiles(req.files);
+    }
 
-    // ── IA #1 · db_query ─────────────────────────────────────
-    // Recibe historial + intención_pendiente para que, si el mensaje actual
-    // son solo datos (nombre, email, etc.), infiera la acción del turno previo.
     const queryResult = await llamarIA("db_query", {
       pregunta,
       historial_reciente,
@@ -157,6 +160,7 @@ export const enviarMensaje = async (req, res) => {
       archivos_contexto: archivosTexto,
       provider,
       model,
+      isWebSearch,      
     });
 
     if (!queryResult.isValid)
@@ -183,10 +187,6 @@ export const enviarMensaje = async (req, res) => {
       }
     }
 
-    // ── IA #2 · db_answer ────────────────────────────────────
-    // Recibe historial + intención_pendiente para mantener coherencia.
-    // Devuelve "intencion_pendiente" (nueva/actualizada o null si cerró)
-    // y "resumen" solo cuando debeResumir=true.
     const tokensAcumulados = (contexto?.tokens_acumulados || 0) + pregunta.length;
     const debeResumir      = tokensAcumulados > TOKENS_PARA_RESUMIR;
 
@@ -204,6 +204,7 @@ export const enviarMensaje = async (req, res) => {
       resumen_anterior:  contexto?.resumen || null,
       provider,
       model,
+      isWebSearch,       
     });
 
     if (!answerResult.isValid)
@@ -227,7 +228,6 @@ export const enviarMensaje = async (req, res) => {
 
     const resumenFinal = resumenNuevo || contexto?.resumen || null;
 
-    // ── 4. Escrituras en transacción corta ───────────────────
     const t = await sequelize.transaction();
     try {
       const totalTras = totalMensajes + 1;
@@ -243,9 +243,8 @@ export const enviarMensaje = async (req, res) => {
         { transaction: t }
       );
 
-      // Un solo update del contexto con todos los campos necesarios
       const contextoUpdate = {
-        intencion_pendiente: nuevaIntencion,   // null limpia la intención si se completó
+        intencion_pendiente: nuevaIntencion,   
       };
 
       if (debeResumir) {
@@ -271,7 +270,6 @@ export const enviarMensaje = async (req, res) => {
       throw writeErr;
     }
 
-    // ── 5. Respuesta final ───────────────────────────────────
     return res.status(200).json({
       ok: true,
       respuesta,
@@ -288,6 +286,8 @@ export const enviarMensaje = async (req, res) => {
         query_generada: query || null,
         total_filas,
         error_sql:      errorEjecucion,
+        web_search_enabled: isWebSearch,
+        attach_enabled:     canAttach,
       },
     });
   } catch (err) {

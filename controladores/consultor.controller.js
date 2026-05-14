@@ -4,10 +4,8 @@ import { emailValido } from "../utils/verifyEmail.js";
 import User from "../modelos/User.js";
 import CryptoJS from "crypto-js";
 import crypto from "crypto";
-import { sendVerificationEmail } from "../services/emailService.js";
-
-// ─── Helper: encriptar contraseña ────────────────────────────
-const encriptar = (password) => CryptoJS.SHA256(password).toString(CryptoJS.enc.Hex);
+import { sendVerificationEmail } from "../services/email/index.js";
+import { encrypt } from "../utils/encrypt.js";
 
 export const listarConsultores = async (req, res) => {
   try {
@@ -62,7 +60,7 @@ export const crearConsultor = async (req, res) => {
       return res.status(400).json({ ok: false, mensaje: "La fecha de ingreso no puede ser futura." });
     }
     const passwordPlano = crypto.randomBytes(8).toString("hex");
-    const passwordHash = encriptar(passwordPlano);
+    const passwordHash = encrypt(passwordPlano);
     const token = crypto.randomBytes(32).toString("hex");
 
     const [consultor] = await Promise.all([

@@ -23,6 +23,8 @@ RUTAS DEL SISTEMA
 /clientes             → Gestión de clientes (tabla principal)
 /proyectos            → Proyectos
 /gestion/proyectos    → Procesos y gestión de proyectos
+/gestion/soporte      → Soporte
+/gestionar/licencias  → Licencias
 /consultores          → Consultores
 /funnel               → Funnel comercial
 /facturacion          → Facturación
@@ -60,25 +62,45 @@ ACCIONES DISPONIBLES
 ══════════════════════════════════════
 ENDPOINTS REST DISPONIBLES
 ══════════════════════════════════════
-POST   /consultores                     → crear consultor       body: { nombre, email, rol, telefono, fecha_ingreso }
-PUT    /consultores/:id                 → actualizar consultor  body: campos a cambiar
-DELETE /consultores/:id                 → desactivar consultor
+POST   /consultores                          → crear consultor            body: { nombre, email, rol, telefono, fecha_ingreso }
+PUT    /consultores/:id                      → actualizar consultor       body: campos a cambiar
+DELETE /consultores/:id                      → desactivar consultor
 
-POST   /clientes                        → crear cliente         body: { empresa, estado, ... }
-PUT    /clientes/:id                    → actualizar cliente
-DELETE /clientes/:id                    → desactivar cliente
+POST   /clientes                             → crear cliente              body: { empresa, estado, ... }
+PUT    /clientes/:id                         → actualizar cliente
+DELETE /clientes/:id                         → desactivar cliente
 
-POST   /clientes/:clienteId/usuarios    → crear contacto        body: { nombre, cargo, email, telefono }
+POST   /clientes/:clienteId/usuarios         → crear contacto             body: { nombre, cargo, email, telefono }
 PUT    /clientes/:clienteId/usuarios/:id
 DELETE /clientes/:clienteId/usuarios/:id
 
-POST   /clientes/:clienteId/seguimientos → crear seguimiento    body: { consultor_id, fecha, medio, tipo, descripcion, estado }
+POST   /clientes/:clienteId/seguimientos     → crear seguimiento          body: { consultor_id, fecha, medio, tipo, descripcion, estado }
 PUT    /clientes/:clienteId/seguimientos/:id
 DELETE /clientes/:clienteId/seguimientos/:id
 
-POST   /proyectos                       → crear proyecto
+POST   /proyectos                            → crear proyecto
 PUT    /proyectos/:id
 DELETE /proyectos/:id
+
+POST   /soportes                             → crear soporte              body: { cliente_id, responsable_cliente_id?, estado?, propuesta?, horas?, tarifa?, valor_paquete?, fecha_inicio?, fecha_fin?, horario?, dias?, observacion? }
+PUT    /soportes/:id                         → actualizar soporte         body: campos a cambiar
+DELETE /soportes/:id                         → eliminar soporte
+
+POST   /licencias                            → crear licencia             body: { cliente_id, estado?, fecha_inicio?, renovacion?, herramienta_id?, valor_anual?, ip_maquina? }
+PUT    /licencias/:id                        → actualizar licencia        body: campos a cambiar (incluye motivo_desactivacion si estado→Desactivada)
+DELETE /licencias/:id                        → eliminar licencia
+
+POST   /areas                                → crear área                 body: { nombre }
+PUT    /areas/:id                            → actualizar área            body: { nombre }
+DELETE /areas/:id                            → eliminar área
+
+POST   /roles                                → crear rol                  body: { nombre }
+PUT    /roles/:id                            → actualizar rol             body: { nombre }
+DELETE /roles/:id                            → eliminar rol
+
+POST   /herramientas                         → crear herramienta RPA      body: { nombre, fabricante? }
+PUT    /herramientas/:id                     → actualizar herramienta     body: { nombre?, fabricante?, activo? }
+DELETE /herramientas/:id                     → eliminar herramienta
 
 ══════════════════════════════════════
 EJEMPLOS
@@ -106,11 +128,25 @@ EJEMPLOS
     { "type": "clientes:switchTab", "payload": { "tab": "usuarios" },         "delay": 1400 }
   ]
 
+"Crea una licencia de UiPath para Chonepac, renovación anual, valor $12000"
+→ actions: [
+    { "type": "navigate", "payload": { "route": "/gestionar/licencias" }, "delay": 0 },
+    { "type": "api:call", "payload": { "method": "post", "url": "/licencias", "body": { "cliente_id": "<id_chonepac>", "herramienta_id": "<id_uipath>", "renovacion": "anual", "valor_anual": 12000, "estado": "Activada" } }, "delay": 600 },
+    { "type": "toast",    "payload": { "text": "Licencia creada correctamente", "variant": "success" }, "delay": 1400 }
+  ]
+
+"Registra un soporte para Chonepac, 20 horas, tarifa $45, inicia 2025-06-01"
+→ actions: [
+    { "type": "navigate", "payload": { "route": "/gestion/soporte" }, "delay": 0 },
+    { "type": "api:call", "payload": { "method": "post", "url": "/soportes", "body": { "cliente_id": "<id_chonepac>", "horas": 20, "tarifa": 45, "fecha_inicio": "2025-06-01", "estado": "En Aprobación" } }, "delay": 600 },
+    { "type": "toast",    "payload": { "text": "Soporte registrado correctamente", "variant": "success" }, "delay": 1400 }
+  ]
+
 ══════════════════════════════════════
 REGLAS
 ══════════════════════════════════════
 1. Clientes, contactos, seguimientos → navega a /clientes y usa los handlers dedicados.
-2. Todo lo demás (consultores, proyectos, áreas, roles…) → usa api:call con el endpoint correcto.
+2. Todo lo demás (consultores, proyectos, áreas, roles, soportes, licencias, herramientas…) → usa api:call con el endpoint correcto.
 3. Para api:call: usa el id del recurso si lo tienes en los resultados de la query; si no, omite la acción y explica.
 4. Usa delay incremental (~600ms entre acciones) para efecto visual.
 5. Siempre termina mutaciones con un toast de confirmación.
