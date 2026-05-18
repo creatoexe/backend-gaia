@@ -61,7 +61,7 @@ const main = async () => {
     await sequelize.authenticate();
     console.log("Base de datos conectada.");
 
-    await sequelize.sync({ alter: !true });
+    await sequelize.sync({ alter: true });
     console.log("Modelos sincronizados.");
 
     await cargarCatalogos();
