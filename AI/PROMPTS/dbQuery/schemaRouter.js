@@ -3,7 +3,7 @@ const KEYWORDS = {
   proyectos:    ['proyecto', 'lead', 'aprobado', 'rechazado', 'ejecuc', 'stand by'],
   procesos:     ['proceso', 'automatizac', 'nombre proceso', 'prioridad', 'solicitud de cambio'],
   seguimientos: ['seguimiento', 'contacto', 'llamada', 'reunion', 'whatsapp', 'linkedin', 'videollamada', 'negociacion'],
-  consultores:  ['consultor', 'admin', 'equipo', 'asignado'],
+consultores:  ['consultor', 'admin', 'equipo', 'asignado', 'vistas', 'vista', 'acceso', 'permiso'],
   etapas:       ['etapa', 'horas', 'fecha inicio', 'fecha fin', 'levantamiento', 'estimacion', 'propuesta',
                  'preliminar', 'aprobacion', 'ejecucion', 'cierre', 'facturado', 'rechazado', 'stand_by',
                  'proximos pasos', 'observacion', 'interaccion'],

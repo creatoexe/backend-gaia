@@ -24,6 +24,7 @@ import licenciaRoutes from "./rutas/licencia.routes.js";
 import emailRoutes from "./rutas/email.routes.js";
 import pipelineRoutes from "./rutas/pipeline.routes.js";
 import { cargarCatalogos }  from "./seeders/catalogosSeed.js";
+import { redis } from "./config/redis.js";
 
 const app  = express();
 const _PORT = PORT || 3000;
@@ -58,12 +59,17 @@ app.use((err, req, res, _next) => {
 
 const main = async () => {
   try {
+    try {
+      await redis.connect();
+      console.log("Redis conectado.");
+    } catch (redisError) {
+      console.warn("Redis no disponible, continuando sin caché:", redisError.message);
+    }
+
     await sequelize.authenticate();
     console.log("Base de datos conectada.");
 
     await sequelize.sync({ alter: true });
-    console.log("Modelos sincronizados.");
-
     await cargarCatalogos();
 
     app.listen(_PORT, "0.0.0.0", () => {

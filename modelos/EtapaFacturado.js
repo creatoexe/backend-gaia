@@ -8,14 +8,6 @@ export const EtapaFacturado = sequelize.define("EtapaFacturado", {
     references: { model: "procesos", key: "id" },
     onDelete: "CASCADE", onUpdate: "CASCADE"
   },
-  numero_factura:    { type: DataTypes.STRING,  allowNull: true },
-  fecha_factura:     { type: DataTypes.DATE,    allowNull: true },
-  valor_facturado:   { type: DataTypes.DECIMAL, allowNull: true },
-  fecha_vencimiento: { type: DataTypes.DATE,    allowNull: true },
-  estado_cobro: {
-    type: DataTypes.ENUM("Pendiente", "Pagado", "Vencido", "Anulado"),
-    allowNull: true, defaultValue: "Pendiente"
-  },
   observaciones:  { type: DataTypes.TEXT, allowNull: true },
   proximos_pasos: { type: DataTypes.TEXT, allowNull: true },
   estado_id: {

@@ -15,4 +15,5 @@ export const EtapaCierre = sequelize.define("EtapaCierre", {
     type: DataTypes.UUID, allowNull: true,
     references: { model: "estados", key: "id" }
   },
+  horas_reales: { type: DataTypes.INTEGER, allowNull: true },
 }, { tableName: "etapa_cierre", timestamps: false });

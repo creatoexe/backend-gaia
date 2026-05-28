@@ -44,6 +44,7 @@ import User from "./User.js";
 import { SeguimientoCliente } from "./SeguimientoCliente.js";
 import { InteraccionAprobacion } from "./InteraccionAprobacion.js";
 import { InteraccionAprobacionConsultor } from "./InteraccionAprobacionConsultor.js";
+import { SeguimientoContacto } from "./SeguimientoContacto.js";
 import { EtapaAprobado } from "./EtapaAprobado.js";
 import { EtapaAprobadoConsultor } from "./EtapaAprobadoConsultor.js";
 import { InteraccionAprobado } from "./InteraccionAprobado.js";
@@ -56,6 +57,7 @@ import { InteraccionCierre } from "./InteraccionCierre.js";
 import { InteraccionCierreConsultor } from "./InteraccionCierreConsultor.js";
 import { EtapaFacturado } from "./EtapaFacturado.js";
 import { EtapaFacturadoConsultor } from "./EtapaFacturadoConsultor.js";
+import { EtapaFacturadoItem } from "./EtapaFacturadoItem.js";
 import { InteraccionFacturado } from "./InteraccionFacturado.js";
 import { InteraccionFacturadoConsultor } from "./InteraccionFacturadoConsultor.js";
 import { EtapaRechazado } from "./EtapaRechazado.js";
@@ -233,6 +235,18 @@ Cliente.hasMany(SeguimientoCliente, { foreignKey: "cliente_id", as: "seguimiento
 SeguimientoCliente.belongsTo(Cliente,        { foreignKey: "cliente_id" });
 SeguimientoCliente.belongsTo(Consultor,      { foreignKey: "consultor_id",       as: "consultor"        });
 SeguimientoCliente.belongsTo(UsuarioCliente, { foreignKey: "usuario_cliente_id", as: "contacto_cliente" });
+SeguimientoCliente.belongsToMany(UsuarioCliente, {
+  through: SeguimientoContacto,
+  foreignKey: "seguimiento_id",
+  otherKey: "usuario_cliente_id",
+  as: "contactos",
+});
+UsuarioCliente.belongsToMany(SeguimientoCliente, {
+  through: SeguimientoContacto,
+  foreignKey: "usuario_cliente_id",
+  otherKey: "seguimiento_id",
+  as: "seguimientos",
+});
 
 Cliente.belongsTo(Estados,        { foreignKey: "estado_id", as: "estadoObj" });
 Estados.hasMany(Cliente,          { foreignKey: "estado_id" });
@@ -323,6 +337,12 @@ Consultor.belongsToMany(EtapaFacturado, {
 EtapaFacturado.hasMany(InteraccionFacturado,   { foreignKey: "etapa_facturado_id", as: "interacciones", onDelete: "CASCADE" });
 InteraccionFacturado.belongsTo(EtapaFacturado, { foreignKey: "etapa_facturado_id" });
 InteraccionFacturado.belongsTo(Estados,        { foreignKey: "estado_id", as: "estadoObj" });
+EtapaFacturado.hasMany(EtapaFacturadoItem, {
+  foreignKey: "etapa_facturado_id", as: "facturas", onDelete: "CASCADE"
+});
+EtapaFacturadoItem.belongsTo(EtapaFacturado, {
+  foreignKey: "etapa_facturado_id"
+});
 InteraccionFacturado.belongsToMany(Consultor, {
   through: InteraccionFacturadoConsultor,
   foreignKey: "interaccion_facturado_id", otherKey: "consultor_id",
@@ -414,6 +434,8 @@ export {
   InteraccionEjecucion, InteraccionEjecucionConsultor,
   EtapaCierre, EtapaCierreConsultor, InteraccionCierre, InteraccionCierreConsultor,
   EtapaFacturado, EtapaFacturadoConsultor, InteraccionFacturado, InteraccionFacturadoConsultor,
+  EtapaFacturadoItem,
   EtapaRechazado, EtapaRechazadoConsultor, InteraccionRechazado, InteraccionRechazadoConsultor,
-  EtapaStandBy, EtapaStandByConsultor, InteraccionStandBy, InteraccionStandByConsultor
+  EtapaStandBy, EtapaStandByConsultor, InteraccionStandBy, InteraccionStandByConsultor,
+  SeguimientoContacto
 };

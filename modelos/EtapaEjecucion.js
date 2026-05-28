@@ -10,7 +10,6 @@ export const EtapaEjecucion = sequelize.define("EtapaEjecucion", {
   },
   fecha_inicio:   { type: DataTypes.DATE,    allowNull: true },
   fecha_fin:      { type: DataTypes.DATE,    allowNull: true  },
-  horas_reales:   { type: DataTypes.INTEGER, allowNull: true  },
   observaciones:  { type: DataTypes.TEXT,    allowNull: true  },
   proximos_pasos: { type: DataTypes.TEXT,    allowNull: true  }, 
   estado_id: {                                                    

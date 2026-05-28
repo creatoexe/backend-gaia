@@ -5,9 +5,15 @@ import { parseAIResponse } from "../utils/jsonUtils.js";
 import { buildAIRequestPayload } from "../AI/buildAIRequestPayload.js";
 import { AI_PROVIDERS } from "../AI/providers.js";
 import { processFiles } from "../utils/fileProcessor.js";
+import { getCache, setCache, delCache } from "../utils/cache.js";
 
-const TOKENS_PARA_RESUMIR  = 2000;   
-const MENSAJES_DE_CONTEXTO = 10;    
+const TOKENS_PARA_RESUMIR  = 2000;
+const MENSAJES_DE_CONTEXTO = 10;
+const CHATS_TTL            = 60 * 2;
+const MENSAJES_TTL         = 60 * 5;
+
+const keyChats    = (userId) => `chats:user:${userId}`;
+const keyMensajes = (chatId) => `chat:${chatId}:mensajes`;
 
 const getUserDesdeToken = async (req) => {
   return User.findOne({ where: { email: req.user.email } });
@@ -21,11 +27,9 @@ const llamarIA = async (mod, data_to_analyze) => {
   return parseAIResponse(raw);
 };
 
-// ────────────────────────────────────────────────────────────
 export const crearChat = async (req, res) => {
   try {
     const { titulo } = req.body;
-
     const user = await getUserDesdeToken(req);
     if (!user)
       return res.status(404).json({ ok: false, mensaje: "Usuario no encontrado." });
@@ -36,6 +40,7 @@ export const crearChat = async (req, res) => {
     });
 
     await ContextoChat.create({ chat_id: chat.id });
+    await delCache(keyChats(user.id));
 
     return res.status(201).json({ ok: true, mensaje: "Chat creado.", data: chat });
   } catch (err) {
@@ -44,18 +49,23 @@ export const crearChat = async (req, res) => {
   }
 };
 
-// ────────────────────────────────────────────────────────────
 export const listarChats = async (req, res) => {
   try {
     const user = await getUserDesdeToken(req);
     if (!user)
       return res.status(404).json({ ok: false, mensaje: "Usuario no encontrado." });
 
+    const cacheKey = keyChats(user.id);
+    const cached   = await getCache(cacheKey);
+    if (cached)
+      return res.status(200).json({ ok: true, data: cached });
+
     const chats = await Chat.findAll({
       where: { user_id: user.id, activo: true },
       order: [["updatedAt", "DESC"]],
     });
 
+    await setCache(cacheKey, chats, CHATS_TTL);
     return res.status(200).json({ ok: true, data: chats });
   } catch (err) {
     console.error("[listarChats]", err.message);
@@ -63,20 +73,26 @@ export const listarChats = async (req, res) => {
   }
 };
 
-// ────────────────────────────────────────────────────────────
 export const obtenerMensajes = async (req, res) => {
   try {
     const chat = await Chat.findByPk(req.params.chatId);
     if (!chat)
       return res.status(404).json({ ok: false, mensaje: "Chat no encontrado." });
 
-    const mensajes = await Mensaje.findAll({
-      where: { chat_id: req.params.chatId },
-      order: [["indice_orden", "ASC"]],
-    });
+    const cacheKey = keyMensajes(req.params.chatId);
+    const cached   = await getCache(cacheKey);
+    if (cached)
+      return res.status(200).json({ ok: true, ...cached });
 
-    const contexto = await ContextoChat.findOne({ where: { chat_id: req.params.chatId } });
+    const [mensajes, contexto] = await Promise.all([
+      Mensaje.findAll({
+        where: { chat_id: req.params.chatId },
+        order: [["indice_orden", "ASC"]],
+      }),
+      ContextoChat.findOne({ where: { chat_id: req.params.chatId } }),
+    ]);
 
+    await setCache(cacheKey, { data: mensajes, contexto }, MENSAJES_TTL);
     return res.status(200).json({ ok: true, data: mensajes, contexto });
   } catch (err) {
     console.error("[obtenerMensajes]", err.message);
@@ -84,7 +100,6 @@ export const obtenerMensajes = async (req, res) => {
   }
 };
 
-// ────────────────────────────────────────────────────────────
 export const eliminarChat = async (req, res) => {
   try {
     const chat = await Chat.findByPk(req.params.chatId);
@@ -92,6 +107,10 @@ export const eliminarChat = async (req, res) => {
       return res.status(404).json({ ok: false, mensaje: "Chat no encontrado." });
 
     await chat.update({ activo: false });
+
+    const user = await getUserDesdeToken(req);
+    await delCache(keyChats(user?.id), keyMensajes(req.params.chatId));
+
     return res.status(200).json({ ok: true, mensaje: "Chat desactivado." });
   } catch (err) {
     console.error("[eliminarChat]", err.message);
@@ -99,24 +118,23 @@ export const eliminarChat = async (req, res) => {
   }
 };
 
-// ────────────────────────────────────────────────────────────
 export const enviarMensaje = async (req, res) => {
   try {
     const { chatId } = req.params;
     const {
       pregunta,
       provider     = "deepseek",
-      model        = 'deepseek-v4-flash',
+      model        = "deepseek-v4-flash",
       currentRoute = "/",
-      webSearch    = "false",     
-      allowAttach  = "true",      
+      webSearch    = "false",
+      allowAttach  = "true",
     } = req.body;
 
     if (!pregunta?.trim())
       return res.status(400).json({ ok: false, mensaje: "'pregunta' es obligatoria." });
 
-    const isWebSearch   = webSearch === "true" || webSearch === true;
-    const canAttach     = allowAttach === "true" || allowAttach === true;
+    const isWebSearch = webSearch === "true" || webSearch === true;
+    const canAttach   = allowAttach === "true" || allowAttach === true;
 
     const [chat, contexto, mensajesRecientes, totalMensajes] = await Promise.all([
       Chat.findByPk(chatId),
@@ -160,7 +178,7 @@ export const enviarMensaje = async (req, res) => {
       archivos_contexto: archivosTexto,
       provider,
       model,
-      isWebSearch,      
+      isWebSearch,
     });
 
     if (!queryResult.isValid)
@@ -204,7 +222,7 @@ export const enviarMensaje = async (req, res) => {
       resumen_anterior:  contexto?.resumen || null,
       provider,
       model,
-      isWebSearch,       
+      isWebSearch,
     });
 
     if (!answerResult.isValid)
@@ -218,12 +236,11 @@ export const enviarMensaje = async (req, res) => {
       respuesta,
       tiene_datos,
       sugerencias,
-      actions                  = [],
-      intencion_pendiente:       nuevaIntencion = null,
-      resumen:                   resumenNuevo  = null,
+      actions                = [],
+      intencion_pendiente:     nuevaIntencion = null,
+      resumen:                 resumenNuevo  = null,
     } = answerResult.parsed;
 
-    console.log("[db_answer] intencion_pendiente:", nuevaIntencion);
     if (resumenNuevo) console.log("[contexto] resumen:", resumenNuevo.slice(0, 100));
 
     const resumenFinal = resumenNuevo || contexto?.resumen || null;
@@ -243,9 +260,7 @@ export const enviarMensaje = async (req, res) => {
         { transaction: t }
       );
 
-      const contextoUpdate = {
-        intencion_pendiente: nuevaIntencion,   
-      };
+      const contextoUpdate = { intencion_pendiente: nuevaIntencion };
 
       if (debeResumir) {
         contextoUpdate.resumen            = resumenFinal;
@@ -258,16 +273,19 @@ export const enviarMensaje = async (req, res) => {
       await contexto.update(contextoUpdate, { transaction: t });
 
       if (totalMensajes === 0) {
-        await chat.update(
-          { titulo: pregunta.trim().slice(0, 80) },
-          { transaction: t }
-        );
+        await chat.update({ titulo: pregunta.trim().slice(0, 80) }, { transaction: t });
       }
 
       await t.commit();
     } catch (writeErr) {
       await t.rollback();
       throw writeErr;
+    }
+
+    await delCache(keyMensajes(chatId));
+    if (totalMensajes === 0) {
+      const user = await getUserDesdeToken(req);
+      await delCache(keyChats(user?.id));
     }
 
     return res.status(200).json({
@@ -283,9 +301,9 @@ export const enviarMensaje = async (req, res) => {
         tokens_acumulados:   debeResumir ? 0 : tokensAcumulados + respuesta.length,
       },
       debug: {
-        query_generada: query || null,
+        query_generada:     query || null,
         total_filas,
-        error_sql:      errorEjecucion,
+        error_sql:          errorEjecucion,
         web_search_enabled: isWebSearch,
         attach_enabled:     canAttach,
       },
