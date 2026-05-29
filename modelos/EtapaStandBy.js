@@ -18,8 +18,8 @@ export const EtapaStandBy = sequelize.define("EtapaStandBy", {
     allowNull: true
   },
   motivo_detalle:       { type: DataTypes.TEXT,   allowNull: true },
-  decision_por:         { type: DataTypes.STRING, allowNull: true }, // contacto del cliente
-  condicion_reactivar:  { type: DataTypes.TEXT,   allowNull: true }, // qué debe pasar para reactivar
+  decision_por:         { type: DataTypes.STRING, allowNull: true }, 
+  condicion_reactivar:  { type: DataTypes.TEXT,   allowNull: true }, 
   observaciones:        { type: DataTypes.TEXT,   allowNull: true },
   proximos_pasos:       { type: DataTypes.TEXT,   allowNull: true },
   estado_id: {
