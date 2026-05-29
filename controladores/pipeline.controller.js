@@ -1,20 +1,10 @@
-// controladores/pipeline.controller.js
 import {
   Cliente, Proyecto, Proceso,
   EtapaPropuesta, Estados, HerramientaRpa, EtapaCierre,
 } from "../modelos/relations.js";
-import { getCache, setCache, delCache, delPattern } from "../utils/cache.js";
-
-const TTL_CLIENTES  = 60 * 5;
-const TTL_PROYECTOS = 60 * 5;
-const TTL_PROCESOS  = 60 * 3;
 
 export const getClientesResumen = async (req, res) => {
-  const cacheKey = "clientes:resumen";
   try {
-    const cached = await getCache(cacheKey);
-    if (cached) return res.json({ ok: true, data: cached, fromCache: true });
-
     const clientes = await Cliente.findAll({
       attributes: ["id", "empresa"],
       include: [{
@@ -45,7 +35,6 @@ export const getClientesResumen = async (req, res) => {
       };
     });
 
-    await setCache(cacheKey, data, TTL_CLIENTES);
     return res.json({ ok: true, data });
   } catch (err) {
     console.error("[getClientesResumen]", err);
@@ -54,12 +43,8 @@ export const getClientesResumen = async (req, res) => {
 };
 
 export const getProyectosDeCliente = async (req, res) => {
-  const { clienteId } = req.params;
-  const cacheKey = `cliente:${clienteId}:proyectos`;
   try {
-    const cached = await getCache(cacheKey);
-    if (cached) return res.json({ ok: true, data: cached, fromCache: true });
-
+    const { clienteId } = req.params;
     const proyectos = await Proyecto.findAll({
       where: { cliente_id: clienteId },
       attributes: ["id", "nombre", "descripcion", "activo"],
@@ -84,7 +69,6 @@ export const getProyectosDeCliente = async (req, res) => {
       };
     });
 
-    await setCache(cacheKey, data, TTL_PROYECTOS);
     return res.json({ ok: true, data });
   } catch (err) {
     console.error("[getProyectosDeCliente]", err);
@@ -93,12 +77,8 @@ export const getProyectosDeCliente = async (req, res) => {
 };
 
 export const getProcesosDeProyecto = async (req, res) => {
-  const { proyectoId } = req.params;
-  const cacheKey = `proyecto:${proyectoId}:procesos`;
   try {
-    const cached = await getCache(cacheKey);
-    if (cached) return res.json({ ok: true, data: cached, fromCache: true });
-
+    const { proyectoId } = req.params;
     const procesos = await Proceso.findAll({
       where:      { proyecto_id: proyectoId },
       attributes: ["id", "nombre_proceso", "tipo", "prioridad"],
@@ -112,7 +92,6 @@ export const getProcesosDeProyecto = async (req, res) => {
     });
 
     const data = procesos.map((p) => p.toJSON());
-    await setCache(cacheKey, data, TTL_PROCESOS);
     return res.json({ ok: true, data });
   } catch (err) {
     console.error("[getProcesosDeProyecto]", err);

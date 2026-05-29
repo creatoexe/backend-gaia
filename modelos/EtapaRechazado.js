@@ -17,7 +17,7 @@ export const EtapaRechazado = sequelize.define("EtapaRechazado", {
     allowNull: true
   },
   motivo_detalle:  { type: DataTypes.TEXT,    allowNull: true },
-  decision_por:    { type: DataTypes.STRING,  allowNull: true }, // nombre del responsable del cliente
+  decision_por:    { type: DataTypes.STRING,  allowNull: true }, 
   recuperable: {
     type: DataTypes.ENUM("Sí", "No", "Posiblemente"),
     allowNull: true

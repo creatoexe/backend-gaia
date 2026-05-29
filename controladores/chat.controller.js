@@ -12,6 +12,8 @@ const MENSAJES_DE_CONTEXTO = 10;
 const CHATS_TTL            = 60 * 2;
 const MENSAJES_TTL         = 60 * 5;
 
+const RELEVO_PROVIDERS = ["deepseek", "claude"];
+
 const keyChats    = (userId) => `chats:user:${userId}`;
 const keyMensajes = (chatId) => `chat:${chatId}:mensajes`;
 
@@ -19,12 +21,51 @@ const getUserDesdeToken = async (req) => {
   return User.findOne({ where: { email: req.user.email } });
 };
 
-const llamarIA = async (mod, data_to_analyze) => {
-  const { payload, provider } = buildAIRequestPayload(mod, data_to_analyze, []);
+const llamarIAConProveedor = async (providerKey, mod, data_to_analyze) => {
+  const { payload, provider } = buildAIRequestPayload(mod, data_to_analyze, [], providerKey);
   const cfg = AI_PROVIDERS[provider];
-  const { data } = await axios.post(cfg.url, payload, { headers: cfg.headers });
-  const raw = cfg.extractResponse(data);
-  return parseAIResponse(raw);
+  const { data } = await axios.post(cfg.url, payload, {
+    headers: cfg.headers,
+    timeout: 60000, 
+  });
+  return parseAIResponse(cfg.extractResponse(data));
+};
+
+const llamarIA = async (mod, data_to_analyze, providerPrincipal = "deepseek") => {
+  const orden = [
+    providerPrincipal,
+    ...RELEVO_PROVIDERS.filter((p) => p !== providerPrincipal),
+  ];
+
+  let lastError = null;
+
+  for (const providerKey of orden) {
+    try {
+      const result = await llamarIAConProveedor(providerKey, mod, data_to_analyze);
+      return { result, providerUsado: providerKey };
+    } catch (err) {
+      const esErrorDeServidor =
+        !err.response ||                         // timeout / sin conexión
+        err.response.status === 429 ||           // rate limit
+        err.response.status === 500 ||           // error interno proveedor
+        err.response.status === 502 ||           // bad gateway
+        err.response.status === 503 ||           // servicio no disponible
+        err.response.status === 504;             // gateway timeout
+
+      if (esErrorDeServidor) {
+        console.warn(
+          `[relevo] Proveedor "${providerKey}" falló (${err.response?.status ?? "sin respuesta"}). ` +
+          `Intentando con el siguiente...`
+        );
+        lastError = err;
+        continue; 
+      }
+      throw err;
+    }
+  }
+  throw new Error(
+    `Todos los proveedores de IA fallaron. Último error: ${lastError?.message}`
+  );
 };
 
 export const crearChat = async (req, res) => {
@@ -170,16 +211,20 @@ export const enviarMensaje = async (req, res) => {
       archivosTexto = await processFiles(req.files);
     }
 
-    const queryResult = await llamarIA("db_query", {
-      pregunta,
-      historial_reciente,
-      intencion_pendiente,
-      resumen_contexto:  contexto?.resumen || null,
-      archivos_contexto: archivosTexto,
-      provider,
-      model,
-      isWebSearch,
-    });
+    const { result: queryResult, providerUsado: providerQuery } = await llamarIA(
+      "db_query",
+      {
+        pregunta,
+        historial_reciente,
+        intencion_pendiente,
+        resumen_contexto:  contexto?.resumen || null,
+        archivos_contexto: archivosTexto,
+        provider,
+        model,
+        isWebSearch,
+      },
+      provider
+    );
 
     if (!queryResult.isValid)
       return res.status(422).json({
@@ -208,22 +253,26 @@ export const enviarMensaje = async (req, res) => {
     const tokensAcumulados = (contexto?.tokens_acumulados || 0) + pregunta.length;
     const debeResumir      = tokensAcumulados > TOKENS_PARA_RESUMIR;
 
-    const answerResult = await llamarIA("db_answer", {
-      pregunta_original: pregunta,
-      current_route:     currentRoute,
-      razon_query:       razon,
-      query_valida:      queryValida && !errorEjecucion,
-      resultados:        resultados.slice(0, 50),
-      total_filas,
-      archivos_contexto: archivosTexto,
-      historial_reciente,
-      intencion_pendiente,
-      generar_resumen:   debeResumir,
-      resumen_anterior:  contexto?.resumen || null,
-      provider,
-      model,
-      isWebSearch,
-    });
+    const { result: answerResult, providerUsado: providerAnswer } = await llamarIA(
+      "db_answer",
+      {
+        pregunta_original: pregunta,
+        current_route:     currentRoute,
+        razon_query:       razon,
+        query_valida:      queryValida && !errorEjecucion,
+        resultados:        resultados.slice(0, 50),
+        total_filas,
+        archivos_contexto: archivosTexto,
+        historial_reciente,
+        intencion_pendiente,
+        generar_resumen:   debeResumir,
+        resumen_anterior:  contexto?.resumen || null,
+        provider,
+        model,
+        isWebSearch,
+      },
+      provider
+    );
 
     if (!answerResult.isValid)
       return res.status(422).json({
@@ -288,6 +337,8 @@ export const enviarMensaje = async (req, res) => {
       await delCache(keyChats(user?.id));
     }
 
+    const huboRelevo = providerQuery !== provider || providerAnswer !== provider;
+
     return res.status(200).json({
       ok: true,
       respuesta,
@@ -306,6 +357,10 @@ export const enviarMensaje = async (req, res) => {
         error_sql:          errorEjecucion,
         web_search_enabled: isWebSearch,
         attach_enabled:     canAttach,
+        provider_solicitado: provider,
+        provider_query:      providerQuery,
+        provider_answer:     providerAnswer,
+        relevo_activado:     huboRelevo,
       },
     });
   } catch (err) {

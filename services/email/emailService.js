@@ -15,16 +15,6 @@ export const sendVerificationEmail = async (email, nombre, token, password) => {
   console.log(`[email] ✓ Verificación enviada a ${email}`);
 };
 
-/**
- * Envía un archivo (representado por una URL de descarga) a un consultor.
- * @param {Object} params
- * @param {string} params.consultorEmail - Correo del consultor
- * @param {string} params.consultorNombre - Nombre del consultor
- * @param {string} params.remitenteNombre - Nombre de quien envía (usuario logueado)
- * @param {string} params.asunto - Asunto del correo
- * @param {string} params.mensaje - Mensaje personalizado
- * @param {string} params.linkArchivo - Enlace de descarga (puede ser temporal)
- */
 export const sendFileToConsultor = async ({ consultorEmail, consultorNombre, remitenteNombre, asunto, mensaje, linkArchivo }) => {
   const transporter = getTransporter();
   await transporter.sendMail({

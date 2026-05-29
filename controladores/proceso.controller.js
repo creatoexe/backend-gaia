@@ -32,7 +32,6 @@ import {
 import { getEstadoId, resolverEstadoId } from "../Helpers/h_estados.js";
 
 const TIPOS_CLASIFICACION = ["Proyecto Nuevo", "Solicitud de Cambio"];
-import { invalidarCacheProcesos } from "../utils/cache.js";
 
 export const listarProcesos = async (req, res) => {
   try {
@@ -79,18 +78,15 @@ export const crearProceso = async (req, res) => {
   try {
     const { proyectoId } = req.params;
     const {
-      nombre_proceso,
       tipo,
       estatus = "Creación",
       prioridad,
       herramientas_ids = [],
     } = req.body;
-
-    if (!nombre_proceso?.trim())
-      return res.status(400).json({ ok: false, mensaje: "'nombre_proceso' es obligatorio." });
+    
     if (tipo && !TIPOS_CLASIFICACION.includes(tipo))
       return res.status(400).json({ ok: false, mensaje: `'tipo' inválido. Válidos: ${TIPOS_CLASIFICACION.join(", ")}.` });
-
+    
     const proyecto = await Proyecto.findByPk(proyectoId);
     if (!proyecto) return res.status(404).json({ ok: false, mensaje: "Proyecto no encontrado." });
 
@@ -102,7 +98,7 @@ export const crearProceso = async (req, res) => {
 
     const proceso = await Proceso.create({
       proyecto_id: proyectoId,
-      nombre_proceso: nombre_proceso.trim(),
+      nombre_proceso: proyecto.nombre,
       tipo: tipo || null,
       estado_id: await resolverEstadoId(estatus),
       prioridad: prioridad || null,
@@ -113,7 +109,6 @@ export const crearProceso = async (req, res) => {
 
     const resultado = await Proceso.findByPk(proceso.id, { include: INCLUDE_PROCESO });
     
-    await invalidarCacheProcesos(proyectoId, proyecto.cliente_id);
 
     return res.status(201).json({ ok: true, mensaje: "Proceso creado.", data: resultado });
   } catch (err) {
@@ -147,7 +142,6 @@ export const actualizarProceso = async (req, res) => {
 
     const resultado = await Proceso.findByPk(proceso.id, { include: INCLUDE_PROCESO });
 
-    await invalidarCacheProcesos(proceso.proyecto_id, proceso.proyecto?.cliente_id);
 
     return res.status(200).json({ ok: true, mensaje: "Proceso actualizado.", data: resultado });
   } catch (err) {
@@ -184,8 +178,6 @@ export const eliminarProceso = async (req, res) => {
     const { proyecto_id, proyecto } = proceso;
 
     await proceso.destroy();
-
-    await invalidarCacheProcesos(proyecto_id, proyecto?.cliente_id);
 
     return res.status(200).json({ ok: true, mensaje: "Proceso eliminado." });
   } catch (err) {
@@ -238,8 +230,6 @@ const upsertEtapa = async ({ Modelo, procesoId, datos, consultores_ids, aliasSet
     await etapa.reload({
       include: [{ model: Consultor, as: "consultores", attributes: ["id", "nombre"] }],
     });
-
-    await invalidarCacheProcesos(proceso.proyecto_id, proceso.proyecto?.cliente_id);
 
     return res.status(creada ? 201 : 200).json({
       ok: true,
@@ -475,8 +465,6 @@ export const upsertFacturado = async (req, res) => {
     const proceso = await Proceso.findByPk(procesoId, {
       include: [{ model: Proyecto, as: "proyecto", attributes: ["id", "cliente_id"] }],
     });
-    await invalidarCacheProcesos(procesoId, proceso?.proyecto?.cliente_id);
-
     return res.status(200).json({ ok: true, data: resultado });
   } catch (err) {
     console.error("[upsertFacturado]", err);

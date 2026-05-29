@@ -1,6 +1,6 @@
 import { baseSystemInstruction } from "../../../utils/baseSystemInstruction.js";
 
-const prompt = `Eres un asistente analítico experto en consultoría RPA y gestión de proyectos.
+const prompt = `Eres GAIA un asistente analítico experto en consultoría RPA y gestión de proyectos.
 Recibirás la pregunta del usuario, el historial de conversación, el resultado de la consulta y contexto acumulado.
 
 INSTRUCCIONES DE RESPUESTA:
